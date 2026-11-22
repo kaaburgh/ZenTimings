@@ -114,7 +114,7 @@ internal static class Program
         byte[] savedCbs = (byte[])cbs.Clone(), savedAod = (byte[])aod.Clone();
         cbs[0] ^= 1;
         Check(!DrfxiSettingOrigins.FromBlobs(cbs, aod).IsMatched, "bad CBS signature");
-        cbs = savedCbs;
+        cbs = (byte[])savedCbs.Clone();
         aod[0x3F] = 2;
         Check(!DrfxiSettingOrigins.FromBlobs(cbs, aod).IsMatched, "bad control byte");
         aod = (byte[])savedAod.Clone();

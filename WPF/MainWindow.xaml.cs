@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Globalization;
 using System.Linq;
 using System.Management;
 using System.Reflection;
@@ -2091,6 +2092,14 @@ namespace ZenTimings
             {
                 BiosMemConfig = BMC?.Config,
                 SettingOrigins = mainViewModel?.SettingOrigins,
+                SettingOriginRunningVoltages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    { "MEM VDD", mainViewModel?.SwaAdcV > 0 ? mainViewModel.SwaAdcV.ToString("F4", CultureInfo.InvariantCulture) : null },
+                    { "MEM VDDQ", mainViewModel?.SwbAdcV > 0 ? mainViewModel.SwbAdcV.ToString("F4", CultureInfo.InvariantCulture) : null },
+                    { "CPU VDDIO", mainViewModel?.ApuVddio > 0 ? mainViewModel.ApuVddio.ToString("F4", CultureInfo.InvariantCulture) : null },
+                    { "MEM VPP", mainViewModel?.VppAdcV > 0 ? mainViewModel.VppAdcV.ToString("F4", CultureInfo.InvariantCulture) : null },
+                    { "VDD MISC", mainViewModel?.Vmisc > 0 ? mainViewModel.Vmisc.ToString("F4", CultureInfo.InvariantCulture) : null }
+                },
                 AsusSensors = AsusWmi?.sensors,
                 Plugins = plugins,
                 LastRefreshUtc = lastRefreshUtc,

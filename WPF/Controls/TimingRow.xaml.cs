@@ -119,6 +119,9 @@ namespace ZenTimings.Controls
         {
             if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(MainViewModel.SettingOrigins))
                 RefreshOrigin();
+            else if (e.PropertyName == nameof(MainViewModel.VddioReadingSource) ||
+                     e.PropertyName == nameof(MainViewModel.VmiscReadingSource))
+                RefreshOriginDisplay();
         }
 
         private void OnOriginSettingChanged(object sender, PropertyChangedEventArgs e)
@@ -143,11 +146,8 @@ namespace ZenTimings.Controls
                 return;
             }
 
-            string label = Label;
             Binding valueBinding = BindingOperations.GetBinding(this, ValueProperty);
-            if (valueBinding?.Path?.Path == "MemoryFrequencyString")
-                label = "Speed";
-            Origin = report.Find(label);
+            Origin = report.FindByBindingPath(valueBinding?.Path?.Path, Label);
             RefreshOriginDisplay();
         }
 
@@ -169,10 +169,13 @@ namespace ZenTimings.Controls
             OriginBadge = Origin.Badge + (mismatch ? " ≠" : "");
             OriginSource = Origin.Source;
             string source = null;
-            if (Label == "MEM VDD" || Label == "MEM VDDQ" || Label == "MEM VPP")
-                source = originViewModel.PmicData?.IsValid == true ? "DIMM PMIC sensor" : "ACPI AOD region (not a PMIC measurement)";
-            else if (Label != null && Label.StartsWith("CPU VDDIO", StringComparison.OrdinalIgnoreCase))
-                source = Label;
+            if (Origin.Row == "MEM VDD" || Origin.Row == "MEM VDDQ" || Origin.Row == "MEM VPP")
+                source = originViewModel.PmicData?.IsValid == true
+                    ? "DIMM PMIC ADC reading" : "ACPI AOD region (not a PMIC measurement)";
+            else if (Origin.Row == "CPU VDDIO")
+                source = originViewModel.VddioReadingSource;
+            else if (Origin.Row == "VDD MISC")
+                source = originViewModel.VmiscReadingSource;
             OriginToolTip = Origin.Tooltip(Value, mclk, source);
             OriginVisibility = Visibility.Visible;
         }

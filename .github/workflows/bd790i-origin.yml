@@ -32,12 +32,15 @@ jobs:
       - name: Run origin resolver regression scenarios
         shell: pwsh
         run: '& .\tests\DrfxiOriginSmoke\bin\Release\DrfxiOriginSmoke.exe'
-      - name: Verify read-only firmware API
+      - name: Verify read-only firmware API across first-party sources
         shell: pwsh
         run: |
-          $source = Get-Content 'WPF/BiosOrigin/DrfxiSettingOrigins.cs' -Raw
-          if ($source -match 'SetFirmwareEnvironmentVariable') {
-            throw 'Unsafe UEFI firmware write API reference in origin reader'
+          $files = @('WPF', 'Common', 'tests') |
+            ForEach-Object { Get-ChildItem -Path $_ -Recurse -File -Filter '*.cs' }
+          foreach ($file in $files) {
+            if ((Get-Content -LiteralPath $file.FullName -Raw) -match 'SetFirmwareEnvironmentVariable(?:Ex)?(?:A|W)?') {
+              throw "Forbidden firmware write API in $($file.FullName)"
+            }
           }
       - name: Build full WPF application
         if: always()

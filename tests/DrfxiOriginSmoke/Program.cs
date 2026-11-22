@@ -131,7 +131,9 @@ internal static class Program
             "offline replay requires explicit raw evidence");
         string text = "AmdSetupRPL.base64: " + Convert.ToBase64String(savedCbs) + "\n"
             + "AodSetupRpl.base64: " + Convert.ToBase64String(savedAod) + "\n";
-        Check(DrfxiSettingOrigins.FromDebugReport("DRFXI", "1.15", text).IsMatched,
+        var replay = DrfxiSettingOrigins.FromDebugReport("DRFXI", "1.15", text);
+        Console.WriteLine("Offline replay: " + replay.Status);
+        Check(replay.IsMatched,
             "offline debug report reproduces origin data");
 
         Console.WriteLine("OK: " + tests + " DRFXI setting-origin assertions");

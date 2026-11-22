@@ -539,7 +539,9 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources\PawnIO\PawnIO_setup.exe" />
-    <EmbeddedResource Include="Resources\BiosLayouts\drfxi-dragonrange-v1.json" />
+    <EmbeddedResource Include="Resources\BiosLayouts\drfxi-dragonrange-v1.json">
+      <LogicalName>ZenTimings.Resources.BiosLayouts.drfxi-dragonrange-v1.json</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ZenStates-Core\ZenStates-Core.csproj">

@@ -73,6 +73,10 @@ namespace ZenTimings.BiosOrigin
             if (!double.TryParse(number.Value.Replace(',', '.'), NumberStyles.Float,
                     CultureInfo.InvariantCulture, out running))
                 return null;
+            // Zero or negative voltage means an absent sensor reading in MainViewModel,
+            // not a physically measured 0 V. Keep UI and snapshot mismatch logic consistent.
+            if (Kind == "voltage" && running <= 0)
+                return null;
             return Math.Abs(expected - running) > tolerance;
         }
 
@@ -81,7 +85,8 @@ namespace ZenTimings.BiosOrigin
             string tooltip = Details ?? "";
             if (Source == "AOD" || Source == "CBS")
             {
-                tooltip += "\nSaved: " + Stored;
+                if (!string.IsNullOrWhiteSpace(Stored))
+                    tooltip += "\nSaved: " + Stored;
                 if (OtherMenuManual)
                     tooltip += "\nBoth AMD Overclocking and AMD CBS are Manual; AOD precedence is inferred, not verified in ABL.";
                 bool? differs = DiffersFrom(displayedValue, mclk);
@@ -95,7 +100,10 @@ namespace ZenTimings.BiosOrigin
                 }
                 else
                 {
-                    tooltip += "\nCannot reliably compare this firmware encoding with the running reading.";
+                    tooltip += Kind == "voltage" && (string.IsNullOrWhiteSpace(displayedValue) ||
+                        displayedValue.StartsWith("0.000", StringComparison.Ordinal))
+                        ? "\nNo valid voltage reading available; comparison skipped."
+                        : "\nSaved and running values cannot be reliably compared.";
                 }
             }
             return tooltip;
@@ -121,13 +129,64 @@ namespace ZenTimings.BiosOrigin
         {
             if (!IsMatched || string.IsNullOrWhiteSpace(label))
                 return null;
-            // The two displayed labels have a dynamic suffix and the speed row is named after the memory type.
+            // Fallback for legacy programmatically populated, unbound rows only.
             if (label.StartsWith("UCLK", StringComparison.OrdinalIgnoreCase)) label = "UCLK";
-            if (label.StartsWith("CPU VDDIO", StringComparison.OrdinalIgnoreCase)) label = "CPU VDDIO";
-            if (label.StartsWith("VDD MISC", StringComparison.OrdinalIgnoreCase)) label = "VDD MISC";
-            if (label == "tRFC (ns)") label = "tRFC (ns)";
+            if (label.StartsWith("CPU VDDIO", StringComparison.OrdinalIgnoreCase) ||
+                label.StartsWith("VDDIO (", StringComparison.OrdinalIgnoreCase)) label = "CPU VDDIO";
+            if (label.StartsWith("VDD MISC", StringComparison.OrdinalIgnoreCase) ||
+                label.StartsWith("MISC (", StringComparison.OrdinalIgnoreCase)) label = "VDD MISC";
+            if (label == "PowerDown") label = "PwrDwn";
             SettingOriginRow row;
             return rows.TryGetValue(label, out row) ? row : null;
+        }
+
+        /// <summary>Canonical origin key for a UI value binding, independent of its dynamic label.</summary>
+        public static string RowForBindingPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+
+            // The same paths are used by both legacy and current DDR5 panels.
+            switch (path)
+            {
+                case "MemoryFrequencyString": return "Speed";
+                case "PowerTable.MCLK": return "MCLK";
+                case "PowerTable.FCLK": return "FCLK";
+                case "PowerTable.UCLK": return "UCLK";
+                case "SwaAdcV": return "MEM VDD";
+                case "SwbAdcV": return "MEM VDDQ";
+                case "ApuVddio": return "CPU VDDIO";
+                case "VppAdcV": return "MEM VPP";
+                case "Vmisc": return "VDD MISC";
+                case "CcdlData": return "tCCDL";
+                case "Timings.PowerDown": return "PwrDwn";
+                case "Timings.RefreshMode": return "Refresh";
+                case "Timings.RFCns": return "tRFC (ns)";
+                case "Timings.BGSAlt": return "BGS Alt";
+                case "Timings.BGS": return "BGS";
+                case "Timings.GDM": return "GDM";
+                case "Timings.Cmd2T": return "Cmd2T";
+                case "Timings.Nitro": return "Nitro";
+                case "ApobData.ProcOdt": return "ProcOdt";
+                case "ApobData.ProcCaDs": return "ProcCaDs";
+                case "ApobData.ProcDqDs": return "ProcDqDs";
+                case "ApobData.DramDataDs": return "DramDqDs";
+                case "ApobData.RttNomWr": return "RttNomWr";
+                case "ApobData.RttNomRd": return "RttNomRd";
+                case "ApobData.RttWr": return "RttWr";
+                case "ApobData.RttPark": return "RttPark";
+                case "ApobData.RttParkDqs": return "RttParkDqs";
+            }
+            if (path.StartsWith("Timings.", StringComparison.Ordinal))
+                return "t" + path.Substring("Timings.".Length);
+            // Unknown source fields must not be relabelled using an unrelated row caption.
+            return null;
+        }
+
+        public SettingOriginRow FindByBindingPath(string bindingPath, string fallbackLabel)
+        {
+            string row = RowForBindingPath(bindingPath);
+            if (row != null) return Find(row);
+            return string.IsNullOrWhiteSpace(bindingPath) ? Find(fallbackLabel) : null;
         }
     }
 
@@ -314,6 +373,10 @@ namespace ZenTimings.BiosOrigin
                     // Fields without a Timing Settings gate have their own APCB paths.
                     SettingOriginRow entry = Choose(e.Row, e.Row == "FCLK" ? "fclk" :
                         e.Row == "UCLK" ? "uclk" : "enum", am, cm, aodValue, cbsValue, true, true);
+                    entry.Details = (entry.Source == "Auto" ? "Auto: " :
+                        entry.Source == "AOD" ? "AMD Overclocking (AodSetupRpl): " : "AMD CBS (AmdSetupRPL): ")
+                        + e.Row + " is an independent setting; Active Memory Timing Settings gates do not control it."
+                        + "\nSource is saved UEFI setup, not a live hardware read.";
                     if (entry.Source == "AOD" || entry.Source == "CBS")
                     {
                         List<Option> options = entry.Source == "AOD" ? e.AodOptions : e.CbsOptions;
@@ -345,6 +408,17 @@ namespace ZenTimings.BiosOrigin
                     var entry = Choose(v.Row, "voltage", gate, false, U16(aod, v.Value), 0, gate, false);
                     if (entry.Source == "AOD")
                         entry.Stored += " mV";
+                    string gateName = v.Gate == 0x192 ? "VDDIO Ctrl" :
+                        v.Gate == 0x19B ? "VPP Ctrl" : "VDD Misc Control";
+                    string gateState = v.Gate == 0x192
+                        ? (aod[v.Gate] == 1 ? "Manual" : aod[v.Gate] == 2 ? "Separate" : "Auto")
+                        : (gate ? "Manual" : "Auto");
+                    entry.Details = "AMD Overclocking (AodSetupRpl) " + gateName +
+                        ": " + gateState + " (0x" + v.Gate.ToString("X3") + ")."
+                        + (gate ? "\nStored voltage control is active." : "\nVoltage control is Auto; AGESA selects the value.")
+                        + "\nSaved NVRAM does not independently confirm the running voltage.";
+                    if (v.Row == "CPU VDDIO")
+                        entry.Details += "\nAPU VDDIO is handed to firmware through extended CMOS (0xA0/0xA1), not an APCB token.";
                     report.Add(entry);
                 }
                 foreach (string row in layout.AgesaRows)
@@ -392,8 +466,9 @@ namespace ZenTimings.BiosOrigin
 
         private static int U16(byte[] data, int offset) => data[offset] | (data[offset + 1] << 8);
 
-        private static int U32(byte[] data, int offset) =>
-            data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24);
+        private static uint U32(byte[] data, int offset) =>
+            (uint)data[offset] | ((uint)data[offset + 1] << 8) |
+            ((uint)data[offset + 2] << 16) | ((uint)data[offset + 3] << 24);
 
         private static int GetNumber(byte[] data, int offset, List<Option> options)
         {
@@ -410,8 +485,8 @@ namespace ZenTimings.BiosOrigin
                 return "AmdSetupRPL size is not 0x6D5";
             if (aod == null || aod.Length != layout.Fingerprint.AodSize)
                 return "AodSetupRpl size is not 0x1AC";
-            if (U32(amd, 0) != unchecked((int)layout.Fingerprint.AmdSignature)
-                || U32(amd, 4) != layout.Fingerprint.AmdLength
+            if (U32(amd, 0) != layout.Fingerprint.AmdSignature
+                || U32(amd, 4) != (uint)layout.Fingerprint.AmdLength
                 || U32(amd, 8) != layout.Fingerprint.AmdGeneration)
                 return "AmdSetupRPL header signature / length / generation differs from the DRFXI layout";
             if (aod[0x3C] != 1 && aod[0x3C] != 255)

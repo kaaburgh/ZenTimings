@@ -40,5 +40,6 @@ jobs:
             throw 'Unsafe UEFI firmware write API reference in origin reader'
           }
       - name: Build full WPF application
+        if: always()
         shell: pwsh
         run: msbuild WPF/ZenTimings.sln /p:Configuration=Release /p:Platform=AnyCPU /verbosity:minimal

@@ -42,4 +42,4 @@ jobs:
       - name: Build full WPF application
         if: always()
         shell: pwsh
-        run: msbuild WPF/ZenTimings.sln /p:Configuration=Release /p:Platform=AnyCPU /verbosity:minimal
+        run: msbuild WPF/ZenTimings.sln /p:Configuration=Release '/p:Platform=Any CPU' /verbosity:minimal

@@ -25,6 +25,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: microsoft/setup-msbuild@v2
       - name: Build origin resolver smoke test
         shell: pwsh
@@ -65,10 +66,11 @@ jobs:
           if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
             throw 'Portable package does not contain ZenTimings.exe'
           }
+          $sourceCommit = (git rev-parse HEAD).Trim()
           @(
             'ZenTimings BD790i Manual / Auto - development build'
             'PR: https://github.com/kaaburgh/ZenTimings/pull/1'
-            "Git commit: $env:GITHUB_SHA"
+            "Git commit: $sourceCommit"
             'Configuration: Release, Any CPU, .NET Framework 4.7.2'
             'Not signed. Not tested on physical DRFXI hardware. Does not write UEFI variables.'
             "ZenTimings.exe SHA256: $((Get-FileHash -Algorithm SHA256 -LiteralPath $binary).Hash)"

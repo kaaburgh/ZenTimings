@@ -276,6 +276,18 @@ namespace ZenTimings.Settings
         public bool SingleInstance { get; set; } = true;
         public bool AutoOpenTelemetry { get; set; } = false;
         public bool ShowUclkRatio { get; set; } = false;
+        private bool _showSettingOrigin = true;
+        /// <summary>Show BIOS Manual/Auto badges when the running board has a verified layout.</summary>
+        public bool ShowSettingOrigin
+        {
+            get => _showSettingOrigin;
+            set
+            {
+                if (_showSettingOrigin == value) return;
+                _showSettingOrigin = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ShowSettingOrigin)));
+            }
+        }
         public bool FirstStart { get; set; } = true;
         public int CornerRadius { get; set; } = 0;
         public ImpedanceTableSource ImpedanceTableSrc { get; set; } = ImpedanceTableSource.APOB;

@@ -300,6 +300,22 @@ namespace ZenTimings.ViewModels
             set => SetProperty(ref _vmiscLabel, value);
         }
 
+        // Name the source of the reading, not the source of the BIOS setting.
+        // A source can be absent even while a 1200 mV voltage is saved in AodSetupRpl.
+        private string _vddioReadingSource = "No valid sensor reading";
+        public string VddioReadingSource
+        {
+            get => _vddioReadingSource;
+            private set => SetProperty(ref _vddioReadingSource, value);
+        }
+
+        private string _vmiscReadingSource = "No valid sensor reading";
+        public string VmiscReadingSource
+        {
+            get => _vmiscReadingSource;
+            private set => SetProperty(ref _vmiscReadingSource, value);
+        }
+
         // The decoded AOD table: rebuilt from the debug report's raw dump in a mock window, read from
         // the live machine otherwise. Everything below that needs AOD goes through here.
         private AodData AodData =>
@@ -671,6 +687,18 @@ namespace ZenTimings.ViewModels
             }
         }
 
+        private static string VoltageReadingSource(VoltageSensorSource? source)
+        {
+            if (!source.HasValue) return "No valid sensor reading";
+            switch (source.Value)
+            {
+                case VoltageSensorSource.SuperIo: return "SuperIO sensor";
+                case VoltageSensorSource.Svi3: return "SMU SVI3 reading";
+                case VoltageSensorSource.Aod: return "ACPI AOD region (not a direct sensor measurement)";
+                default: return "No valid sensor reading";
+            }
+        }
+
         // The memory controller runs at MCLK or at half of it, any other reading is not a ratio it has.
         // Compared within half a percent, the clocks come out of the power table as measured values.
         private static string UclkRatioLabel(float uclk, float mclk)
@@ -701,12 +729,14 @@ namespace ZenTimings.ViewModels
 
             ApuVddio = ReadVoltage(VoltageRail.Vddio, out source);
             VddioLabel = VoltageLabel("VDDIO", "CPU VDDIO", source);
+            VddioReadingSource = VoltageReadingSource(source);
 
             Vsoc = ReadVoltage(VoltageRail.Vsoc, out source);
             VsocLabel = VoltageLabel("VSOC", "VSOC", source);
 
             Vmisc = ReadVoltage(VoltageRail.Vmisc, out source);
             VmiscLabel = VoltageLabel("MISC", "VDD MISC", source);
+            VmiscReadingSource = VoltageReadingSource(source);
 
             RefreshUclkLabel();
         }

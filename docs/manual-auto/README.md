@@ -12,7 +12,7 @@ Goal: next to every memory value ZenTimings shows, tell the user **where the val
 | `≠` flag | a manual setting exists but the running register value differs (clamped/rounded by AGESA, overridden by another menu, or not applied yet) |
 | `?` | layout unknown or failed the plausibility check |
 
-Plan status: **design only, no code yet.** Documents:
+Plan status: **phase 1 implemented in [draft PR #1](https://github.com/kaaburgh/ZenTimings/pull/1)** for DRFXI BIOS 1.15/1.17. Windows CI builds and offline tests pass; UEFI runtime visibility and layout/tooltip rendering on the owner's BD790i remain to be verified on hardware. Phase 2 is design only. Documents:
 
 1. [`01-bd790i-plan.md`](01-bd790i-plan.md) — phase 1: MINISFORUM BD790i / BD790i X3D, BIOS DRFXI 1.15 and 1.17 (Ryzen 7945HX/7945HX3D, Dragon Range, AGESA DragonRangePI-FL1 1.0.0.3h).
 2. [`02-any-board-plan.md`](02-any-board-plan.md) — phase 2: architecture for any board (layout database, in-app layout derivation from the user's BIOS file, plausibility check, "report a problem" GitHub issue, AI-assisted maintainer pipeline, APCB path).

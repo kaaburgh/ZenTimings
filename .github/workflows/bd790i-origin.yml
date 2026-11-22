@@ -62,16 +62,30 @@ jobs:
           Get-ChildItem -LiteralPath $release -Force |
             Where-Object { $_.Extension -notin @('.pdb', '.xml') } |
             Copy-Item -Destination $stage -Recurse -Force
-          # ZenStates-Core's net20 post-build target puts InpOut beside its own
-          # build outputs, NOT in WPF/bin/Release. Without this native DLL,
-          # Cpu.io is null and ACPI AOD / APOB physical-memory reads fail.
-          $legacyDllSource = Join-Path $PWD 'ZenStates-Core/External/InpOut/x64/inpoutx64.dll'
-          $legacyLicenseSource = Join-Path $PWD 'ZenStates-Core/External/InpOut/license.txt'
-          if (-not (Test-Path -LiteralPath $legacyDllSource -PathType Leaf) -or
-              -not (Test-Path -LiteralPath $legacyLicenseSource -PathType Leaf)) {
-            throw 'Pinned ZenStates-Core native I/O DLL or its license is missing'
+          # The native InpOut binary is not committed to ZenStates-Core. The official
+          # ZenTimings 142.713 distribution still bundles it. Fetch that exact release,
+          # authenticate its entire archive by the upstream-published SHA-256 digest,
+          # and extract ONLY the native DLL. Never execute an upstream binary in CI.
+          $releaseZip = Join-Path $env:RUNNER_TEMP 'ZenTimings-v142.713-official.zip'
+          $nativeDir = Join-Path $env:RUNNER_TEMP 'zentimings-official-native'
+          $officialUrl = 'https://github.com/irusanov/ZenTimings/releases/download/v142.713/ZenTimings_v142.713.zip'
+          $officialDigest = 'C49F5A4A66A2C438D8B2BDD FDE5338DF67AD8BED835A5F2E3AD421B21C4D76A0'.Replace(' ', '')
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri $officialUrl -OutFile $releaseZip -MaximumRetryCount 3 -RetryIntervalSec 5
+          $actualDigest = (Get-FileHash -Algorithm SHA256 -LiteralPath $releaseZip).Hash
+          if ($actualDigest -ne $officialDigest) {
+            throw "Official ZenTimings archive hash mismatch: $actualDigest"
           }
-          Copy-Item -LiteralPath $legacyDllSource -Destination (Join-Path $stage 'inpoutx64.dll') -Force
+          Expand-Archive -LiteralPath $releaseZip -DestinationPath $nativeDir -Force
+          $nativeCandidates = @(Get-ChildItem -LiteralPath $nativeDir -Recurse -File -Filter 'inpoutx64.dll')
+          if ($nativeCandidates.Count -ne 1) {
+            throw "Expected exactly one inpoutx64.dll in official release, found $($nativeCandidates.Count)"
+          }
+          $legacyLicenseSource = Join-Path $PWD 'ZenStates-Core/External/InpOut/license.txt'
+          if (-not (Test-Path -LiteralPath $legacyLicenseSource -PathType Leaf)) {
+            throw 'InpOut license missing from pinned ZenStates-Core'
+          }
+          Copy-Item -LiteralPath $nativeCandidates[0].FullName -Destination (Join-Path $stage 'inpoutx64.dll') -Force
           Copy-Item -LiteralPath $legacyLicenseSource -Destination (Join-Path $stage 'InpOut.LICENSE.txt') -Force
 
           $binary = Join-Path $stage 'ZenTimings.exe'

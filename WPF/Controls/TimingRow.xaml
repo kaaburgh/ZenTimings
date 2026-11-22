@@ -7,6 +7,7 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" SharedSizeGroup="TimingRowLabel" />
             <ColumnDefinition x:Name="ValueColumn" Width="Auto" SharedSizeGroup="TimingRowValue" />
+            <ColumnDefinition Width="Auto" SharedSizeGroup="TimingRowOrigin" />
         </Grid.ColumnDefinitions>
 
         <TextBlock x:Name="LabelBlock"
@@ -20,5 +21,31 @@
                    Style="{DynamicResource ValueStyles}"
                    Text="{Binding Value, RelativeSource={RelativeSource AncestorType={x:Type local:TimingRow}}}"
                    ToolTip="{Binding ValueToolTip, RelativeSource={RelativeSource AncestorType={x:Type local:TimingRow}}}" />
+        <!-- A compact, theme-aware indicator. Hidden entirely when no verified DRFXI layout applies. -->
+        <TextBlock x:Name="OriginBlock"
+                   Grid.Column="2"
+                   MinWidth="42"
+                   Padding="4,2,2,2"
+                   TextAlignment="Right"
+                   Text="{Binding OriginBadge, RelativeSource={RelativeSource AncestorType={x:Type local:TimingRow}}}"
+                   Visibility="{Binding OriginVisibility, RelativeSource={RelativeSource AncestorType={x:Type local:TimingRow}}}"
+                   ToolTip="{Binding OriginToolTip, RelativeSource={RelativeSource AncestorType={x:Type local:TimingRow}}}">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding OriginSource, RelativeSource={RelativeSource AncestorType={x:Type local:TimingRow}}}" Value="AOD">
+                            <Setter Property="Foreground" Value="{DynamicResource AccentTextColor}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding OriginSource, RelativeSource={RelativeSource AncestorType={x:Type local:TimingRow}}}" Value="CBS">
+                            <Setter Property="Foreground" Value="{DynamicResource AccentTextColor}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding OriginSource, RelativeSource={RelativeSource AncestorType={x:Type local:TimingRow}}}" Value="AGESA">
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledColor}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
     </Grid>
 </UserControl>

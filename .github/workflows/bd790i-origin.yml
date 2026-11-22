@@ -62,9 +62,25 @@ jobs:
           Get-ChildItem -LiteralPath $release -Force |
             Where-Object { $_.Extension -notin @('.pdb', '.xml') } |
             Copy-Item -Destination $stage -Recurse -Force
+          # ZenStates-Core's net20 post-build target puts InpOut beside its own
+          # build outputs, NOT in WPF/bin/Release. Without this native DLL,
+          # Cpu.io is null and ACPI AOD / APOB physical-memory reads fail.
+          $legacyDllSource = Join-Path $PWD 'ZenStates-Core/External/InpOut/x64/inpoutx64.dll'
+          $legacyLicenseSource = Join-Path $PWD 'ZenStates-Core/External/InpOut/license.txt'
+          if (-not (Test-Path -LiteralPath $legacyDllSource -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $legacyLicenseSource -PathType Leaf)) {
+            throw 'Pinned ZenStates-Core native I/O DLL or its license is missing'
+          }
+          Copy-Item -LiteralPath $legacyDllSource -Destination (Join-Path $stage 'inpoutx64.dll') -Force
+          Copy-Item -LiteralPath $legacyLicenseSource -Destination (Join-Path $stage 'InpOut.LICENSE.txt') -Force
+
           $binary = Join-Path $stage 'ZenTimings.exe'
           if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
             throw 'Portable package does not contain ZenTimings.exe'
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path $stage 'ZenStates-Core.dll') -PathType Leaf) -or
+              -not (Test-Path -LiteralPath (Join-Path $stage 'inpoutx64.dll') -PathType Leaf)) {
+            throw 'Portable package is missing the managed or native I/O dependency'
           }
           $sourceCommit = (git rev-parse HEAD).Trim()
           @(
@@ -73,7 +89,11 @@ jobs:
             "Git commit: $sourceCommit"
             'Configuration: Release, Any CPU, .NET Framework 4.7.2'
             'Not signed. Not tested on physical DRFXI hardware. Does not write UEFI variables.'
+            'IMPORTANT: Includes the legacy InpOut native library for AOD/APOB reads.'
+            'The native library may load a legacy kernel driver, which Windows 11 security can block.'
+            'Do not disable Memory Integrity or Microsoft vulnerable driver protections to run it.'
             "ZenTimings.exe SHA256: $((Get-FileHash -Algorithm SHA256 -LiteralPath $binary).Hash)"
+            "inpoutx64.dll SHA256: $((Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $stage 'inpoutx64.dll')).Hash)"
           ) | Set-Content -LiteralPath (Join-Path $stage 'BUILD-INFO.txt') -Encoding UTF8
           Write-Host 'Portable package contents:'
           Get-ChildItem -LiteralPath $stage -Recurse -File | Select-Object FullName,Length

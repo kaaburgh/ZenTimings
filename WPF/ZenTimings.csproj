@@ -62,6 +62,7 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Numerics" />
     <Reference Include="System.Security" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.ServiceProcess" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
@@ -104,6 +105,7 @@
       <Link>Common\UpdaterPersistenceProvider.cs</Link>
     </Compile>
     <Compile Include="Converters\CountToVisibilityConverter.cs" />
+    <Compile Include="BiosOrigin\DrfxiSettingOrigins.cs" />
     <Compile Include="Export\CoreOptionsScope.cs" />
     <Compile Include="Export\SnapshotHtmlWriter.cs" />
     <Compile Include="Helpers\AgesaHelper.cs" />
@@ -537,6 +539,7 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources\PawnIO\PawnIO_setup.exe" />
+    <EmbeddedResource Include="Resources\BiosLayouts\drfxi-dragonrange-v1.json" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ZenStates-Core\ZenStates-Core.csproj">

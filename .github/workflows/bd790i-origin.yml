@@ -1,0 +1,44 @@
+name: BD790i setting origin
+on:
+  push:
+    branches:
+      - feat/bd790i-setting-origin
+  pull_request:
+    paths:
+      - 'WPF/BiosOrigin/**'
+      - 'WPF/Resources/BiosLayouts/**'
+      - 'WPF/Controls/TimingRow.*'
+      - 'WPF/Export/**'
+      - 'WPF/MainWindow.*'
+      - 'WPF/ViewModels/MainViewModel.cs'
+      - 'WPF/Settings/AppSettings.cs'
+      - 'WPF/Windows/DebugDialog.*'
+      - 'WPF/ZenTimings.csproj'
+      - 'tests/DrfxiOriginSmoke/**'
+      - '.github/workflows/bd790i-origin.yml'
+jobs:
+  build-and-test:
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build origin resolver smoke test
+        shell: pwsh
+        run: msbuild tests/DrfxiOriginSmoke/DrfxiOriginSmoke.csproj /p:Configuration=Release /p:Platform=AnyCPU /verbosity:minimal
+      - name: Run origin resolver regression scenarios
+        shell: pwsh
+        run: '& .\tests\DrfxiOriginSmoke\bin\Release\DrfxiOriginSmoke.exe'
+      - name: Verify read-only firmware API
+        shell: pwsh
+        run: |
+          $source = Get-Content 'WPF/BiosOrigin/DrfxiSettingOrigins.cs' -Raw
+          if ($source -match 'SetFirmwareEnvironmentVariable') {
+            throw 'Unsafe UEFI firmware write API reference in origin reader'
+          }
+      - name: Build full WPF application
+        shell: pwsh
+        run: msbuild WPF/ZenTimings.sln /p:Configuration=Release /p:Platform=AnyCPU /verbosity:minimal

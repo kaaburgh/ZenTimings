@@ -15,6 +15,7 @@ using ZenStates.Core.Hardware.DRAM.DDR4.Thermal;
 using ZenStates.Core.Hardware.DRAM.DDR5.Pmic;
 using ZenStates.Core.Hardware.DRAM.DDR5.Spd;
 using ZenStates.Core.Hardware.DRAM.DDR5.Thermal;
+using ZenTimings.BiosOrigin;
 using ZenTimings.Helpers;
 using ZenTimings.Settings;
 using CpuSingleton = ZenTimings.Common.CpuSingleton;
@@ -117,6 +118,8 @@ namespace ZenTimings.Export
             var config = new SnapshotObject();
             if (options.Has(SnapshotSections.Timings) || options.Has(SnapshotSections.Registers))
                 AddSection(config, "config", "timings", () => BuildTimings(cpu));
+            if (options.Has(SnapshotSections.Timings))
+                AddSection(config, "config", "setting_origins", () => BuildSettingOrigins(cpu));
             if (options.Has(SnapshotSections.Aod))
                 AddSection(config, "config", "aod", () => BuildAod(cpu));
             if (options.Has(SnapshotSections.Apob))
@@ -642,6 +645,71 @@ namespace ZenTimings.Export
                 .Add("note", "timing values are in memory clock cycles (tCK) unless the name ends with ns, Frequency is in MT/s")
                 .Add("dct_mismatch", mismatch)
                 .Add("per_dct", perDct);
+        }
+
+        private object BuildSettingOrigins(Cpu cpu)
+        {
+            SettingOriginReport report = source.SettingOrigins;
+            if (report == null)
+                return new SnapshotObject().Add("matched", false).Add("status", "not checked");
+
+            var node = new SnapshotObject()
+                .Add("matched", report.IsMatched)
+                .Add("layout_id", report.LayoutId)
+                .Add("plausibility", report.Plausibility)
+                .Add("status", report.Status);
+
+            if (!report.IsMatched)
+                return node;
+
+            double mclk = cpu.powerTable?.MCLK ?? 0;
+            var fields = new SnapshotObject();
+            foreach (var pair in report.Rows.OrderBy(p => p.Key, StringComparer.Ordinal))
+            {
+                SettingOriginRow entry = pair.Value;
+                string running = OriginRunningValue(cpu, entry.Row);
+                bool? differs = entry.DiffersFrom(running, mclk);
+                fields.Add(pair.Key, new SnapshotObject()
+                    .Add("origin", entry.Source)
+                    .Add("saved", entry.Stored)
+                    .Add("running", running)
+                    .Add("differs_from_running", differs)
+                    .Add("both_menus_manual", entry.OtherMenuManual)
+                    .Add("note", entry.Details));
+            }
+            return node.Add("rows", fields);
+        }
+
+        private string OriginRunningValue(Cpu cpu, string label)
+        {
+            if (source.SettingOriginRunningVoltages != null)
+            {
+                string voltage;
+                if (source.SettingOriginRunningVoltages.TryGetValue(label, out voltage))
+                    return voltage;
+            }
+
+            if (label == "MCLK") return cpu.powerTable?.MCLK.ToString(CultureInfo.InvariantCulture);
+            if (label == "FCLK") return cpu.powerTable?.FCLK.ToString(CultureInfo.InvariantCulture);
+            if (label == "UCLK") return cpu.powerTable?.UCLK.ToString(CultureInfo.InvariantCulture);
+            if (label == "Speed")
+            {
+                if (cpu.powerTable?.MCLK > 0)
+                    return (cpu.powerTable.MCLK * 2).ToString(CultureInfo.InvariantCulture);
+                return null;
+            }
+
+            if (!label.StartsWith("t", StringComparison.Ordinal) || label == "tRFC (ns)")
+                return null;
+
+            var all = cpu.GetMemoryConfig()?.Timings;
+            object timings = all == null || all.Count == 0 ? null : all.First().Value;
+            if (timings == null) return null;
+            string name = label.Substring(1);
+            var property = timings.GetType().GetProperty(name);
+            object value = property != null ? property.GetValue(timings, null)
+                : timings.GetType().GetField(name)?.GetValue(timings);
+            return value == null ? null : Convert.ToString(value, CultureInfo.InvariantCulture);
         }
 
         private object BuildAod(Cpu cpu)

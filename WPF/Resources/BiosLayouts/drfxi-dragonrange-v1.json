@@ -1,0 +1,1759 @@
+{
+  "id": "drfxi-dragonrange-v1",
+  "source": "DRFXI 1.15 / 1.17 IFR setup-questions.json; corroborated with AOD/CBS APCB maps",
+  "fingerprint": {
+    "amdSize": 1749,
+    "amdSignature": 4232074154,
+    "amdLength": 728,
+    "amdGeneration": 1268602889,
+    "aodSize": 428
+  },
+  "timings": [
+    {
+      "row": "tCL",
+      "aodCtrl": 63,
+      "aodValue": 64,
+      "cbsCtrl": 281,
+      "cbsValue": 282,
+      "aodMin": 22,
+      "aodMax": 64,
+      "cbsMin": 22,
+      "cbsMax": 64,
+      "aodStep": 2,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRCDWR",
+      "aodCtrl": 66,
+      "aodValue": 67,
+      "cbsCtrl": 284,
+      "cbsValue": 285,
+      "aodMin": 8,
+      "aodMax": 62,
+      "cbsMin": 8,
+      "cbsMax": 62,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRCDRD",
+      "aodCtrl": 66,
+      "aodValue": 67,
+      "cbsCtrl": 284,
+      "cbsValue": 285,
+      "aodMin": 8,
+      "aodMax": 62,
+      "cbsMin": 8,
+      "cbsMax": 62,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRP",
+      "aodCtrl": 69,
+      "aodValue": 70,
+      "cbsCtrl": 287,
+      "cbsValue": 288,
+      "aodMin": 8,
+      "aodMax": 62,
+      "cbsMin": 8,
+      "cbsMax": 62,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRAS",
+      "aodCtrl": 72,
+      "aodValue": 73,
+      "cbsCtrl": 290,
+      "cbsValue": 291,
+      "aodMin": 30,
+      "aodMax": 126,
+      "cbsMin": 30,
+      "cbsMax": 126,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRC",
+      "aodCtrl": 75,
+      "aodValue": 76,
+      "cbsCtrl": 293,
+      "cbsValue": 294,
+      "aodMin": 32,
+      "aodMax": 255,
+      "cbsMin": 32,
+      "cbsMax": 255,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tWR",
+      "aodCtrl": 78,
+      "aodValue": 79,
+      "cbsCtrl": 296,
+      "cbsValue": 297,
+      "aodMin": 48,
+      "aodMax": 96,
+      "cbsMin": 48,
+      "cbsMax": 96,
+      "aodStep": 6,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRFC",
+      "aodCtrl": 81,
+      "aodValue": 82,
+      "cbsCtrl": 299,
+      "cbsValue": 300,
+      "aodMin": 50,
+      "aodMax": 4095,
+      "cbsMin": 50,
+      "cbsMax": 4095,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRFC2",
+      "aodCtrl": 84,
+      "aodValue": 85,
+      "cbsCtrl": 302,
+      "cbsValue": 303,
+      "aodMin": 50,
+      "aodMax": 4095,
+      "cbsMin": 50,
+      "cbsMax": 4095,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRFCsb",
+      "aodCtrl": 87,
+      "aodValue": 88,
+      "cbsCtrl": 305,
+      "cbsValue": 306,
+      "aodMin": 50,
+      "aodMax": 2047,
+      "cbsMin": 50,
+      "cbsMax": 2047,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRTP",
+      "aodCtrl": 90,
+      "aodValue": 91,
+      "cbsCtrl": 308,
+      "cbsValue": 309,
+      "aodMin": 5,
+      "aodMax": 31,
+      "cbsMin": 5,
+      "cbsMax": 31,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRRDL",
+      "aodCtrl": 93,
+      "aodValue": 94,
+      "cbsCtrl": 311,
+      "cbsValue": 312,
+      "aodMin": 4,
+      "aodMax": 32,
+      "cbsMin": 4,
+      "cbsMax": 32,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRRDS",
+      "aodCtrl": 96,
+      "aodValue": 97,
+      "cbsCtrl": 314,
+      "cbsValue": 315,
+      "aodMin": 4,
+      "aodMax": 20,
+      "cbsMin": 4,
+      "cbsMax": 20,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tFAW",
+      "aodCtrl": 99,
+      "aodValue": 100,
+      "cbsCtrl": 317,
+      "cbsValue": 318,
+      "aodMin": 20,
+      "aodMax": 80,
+      "cbsMin": 20,
+      "cbsMax": 80,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tWTRL",
+      "aodCtrl": 102,
+      "aodValue": 103,
+      "cbsCtrl": 320,
+      "cbsValue": 321,
+      "aodMin": 8,
+      "aodMax": 48,
+      "cbsMin": 8,
+      "cbsMax": 48,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tWTRS",
+      "aodCtrl": 105,
+      "aodValue": 106,
+      "cbsCtrl": 323,
+      "cbsValue": 324,
+      "aodMin": 2,
+      "aodMax": 16,
+      "cbsMin": 2,
+      "cbsMax": 16,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRDRDSCL",
+      "aodCtrl": 108,
+      "aodValue": 109,
+      "cbsCtrl": 326,
+      "cbsValue": 327,
+      "aodMin": 1,
+      "aodMax": 15,
+      "cbsMin": 1,
+      "cbsMax": 15,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRDRDSC",
+      "aodCtrl": 111,
+      "aodValue": 112,
+      "cbsCtrl": 329,
+      "cbsValue": 330,
+      "aodMin": 1,
+      "aodMax": 15,
+      "cbsMin": 1,
+      "cbsMax": 15,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRDRDSD",
+      "aodCtrl": 114,
+      "aodValue": 115,
+      "cbsCtrl": 332,
+      "cbsValue": 333,
+      "aodMin": 1,
+      "aodMax": 15,
+      "cbsMin": 1,
+      "cbsMax": 15,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRDRDDD",
+      "aodCtrl": 117,
+      "aodValue": 118,
+      "cbsCtrl": 335,
+      "cbsValue": 336,
+      "aodMin": 1,
+      "aodMax": 15,
+      "cbsMin": 1,
+      "cbsMax": 15,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tWRWRSCL",
+      "aodCtrl": 120,
+      "aodValue": 121,
+      "cbsCtrl": 338,
+      "cbsValue": 339,
+      "aodMin": 1,
+      "aodMax": 63,
+      "cbsMin": 1,
+      "cbsMax": 63,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tWRWRSC",
+      "aodCtrl": 123,
+      "aodValue": 124,
+      "cbsCtrl": 341,
+      "cbsValue": 342,
+      "aodMin": 1,
+      "aodMax": 15,
+      "cbsMin": 1,
+      "cbsMax": 15,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tWRWRSD",
+      "aodCtrl": 126,
+      "aodValue": 127,
+      "cbsCtrl": 344,
+      "cbsValue": 345,
+      "aodMin": 1,
+      "aodMax": 15,
+      "cbsMin": 1,
+      "cbsMax": 15,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tWRWRDD",
+      "aodCtrl": 129,
+      "aodValue": 130,
+      "cbsCtrl": 347,
+      "cbsValue": 348,
+      "aodMin": 1,
+      "aodMax": 15,
+      "cbsMin": 1,
+      "cbsMax": 15,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tWRRD",
+      "aodCtrl": 132,
+      "aodValue": 133,
+      "cbsCtrl": 350,
+      "cbsValue": 351,
+      "aodMin": 1,
+      "aodMax": 15,
+      "cbsMin": 1,
+      "cbsMax": 15,
+      "aodStep": 0,
+      "cbsStep": 0
+    },
+    {
+      "row": "tRDWR",
+      "aodCtrl": 135,
+      "aodValue": 136,
+      "cbsCtrl": 353,
+      "cbsValue": 354,
+      "aodMin": 1,
+      "aodMax": 31,
+      "cbsMin": 1,
+      "cbsMax": 31,
+      "aodStep": 0,
+      "cbsStep": 0
+    }
+  ],
+  "enums": [
+    {
+      "row": "ProcCaDs",
+      "aodOffset": 138,
+      "cbsOffset": 357,
+      "aodOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 120,
+          "label": "120.0 Ohm"
+        },
+        {
+          "value": 60,
+          "label": "60.0 Ohm"
+        },
+        {
+          "value": 40,
+          "label": "40.0 Ohm"
+        },
+        {
+          "value": 30,
+          "label": "30.0 Ohm"
+        }
+      ],
+      "cbsOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 120,
+          "label": "120.0 Ohm"
+        },
+        {
+          "value": 60,
+          "label": "60.0 Ohm"
+        },
+        {
+          "value": 40,
+          "label": "40.0 Ohm"
+        },
+        {
+          "value": 30,
+          "label": "30.0 Ohm"
+        }
+      ]
+    },
+    {
+      "row": "ProcDqDs",
+      "aodOffset": 139,
+      "cbsOffset": 365,
+      "aodOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "High Impedance"
+        },
+        {
+          "value": 2,
+          "label": "240 ohm"
+        },
+        {
+          "value": 4,
+          "label": "120 ohm"
+        },
+        {
+          "value": 6,
+          "label": "80 ohm"
+        },
+        {
+          "value": 12,
+          "label": "60 ohm"
+        },
+        {
+          "value": 14,
+          "label": "48 ohm"
+        },
+        {
+          "value": 28,
+          "label": "40 ohm"
+        },
+        {
+          "value": 30,
+          "label": "34.3 ohm"
+        }
+      ],
+      "cbsOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "High Impedance"
+        },
+        {
+          "value": 1,
+          "label": "480 ohm"
+        },
+        {
+          "value": 63,
+          "label": "25.3 ohm"
+        }
+      ]
+    },
+    {
+      "row": "ProcOdt",
+      "aodOffset": 140,
+      "cbsOffset": 364,
+      "aodOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "High Impedance"
+        },
+        {
+          "value": 1,
+          "label": "480 ohm"
+        },
+        {
+          "value": 2,
+          "label": "240 ohm"
+        },
+        {
+          "value": 3,
+          "label": "160 ohm"
+        },
+        {
+          "value": 4,
+          "label": "120 ohm"
+        },
+        {
+          "value": 5,
+          "label": "96 ohm"
+        },
+        {
+          "value": 6,
+          "label": "80 ohm"
+        },
+        {
+          "value": 7,
+          "label": "68.6 ohm"
+        },
+        {
+          "value": 12,
+          "label": "60 ohm"
+        },
+        {
+          "value": 13,
+          "label": "53.3 ohm"
+        },
+        {
+          "value": 14,
+          "label": "48 ohm"
+        },
+        {
+          "value": 15,
+          "label": "43.6 ohm"
+        },
+        {
+          "value": 28,
+          "label": "40 ohm"
+        },
+        {
+          "value": 29,
+          "label": "36.9 ohm"
+        },
+        {
+          "value": 30,
+          "label": "34.3 ohm"
+        },
+        {
+          "value": 31,
+          "label": "32 ohm"
+        },
+        {
+          "value": 60,
+          "label": "30 ohm"
+        },
+        {
+          "value": 61,
+          "label": "28.2 ohm"
+        },
+        {
+          "value": 62,
+          "label": "26.7 ohm"
+        },
+        {
+          "value": 63,
+          "label": "25.3 ohm"
+        }
+      ],
+      "cbsOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "High Impedance"
+        },
+        {
+          "value": 1,
+          "label": "480 ohm"
+        },
+        {
+          "value": 2,
+          "label": "240 ohm"
+        },
+        {
+          "value": 3,
+          "label": "160 ohm"
+        },
+        {
+          "value": 4,
+          "label": "120 ohm"
+        },
+        {
+          "value": 5,
+          "label": "96 ohm"
+        },
+        {
+          "value": 6,
+          "label": "80 ohm"
+        },
+        {
+          "value": 7,
+          "label": "68 ohm"
+        },
+        {
+          "value": 12,
+          "label": "60 ohm"
+        },
+        {
+          "value": 13,
+          "label": "53 ohm"
+        },
+        {
+          "value": 14,
+          "label": "48 ohm"
+        },
+        {
+          "value": 15,
+          "label": "43 ohm"
+        },
+        {
+          "value": 28,
+          "label": "40 ohm"
+        },
+        {
+          "value": 29,
+          "label": "36 ohm"
+        },
+        {
+          "value": 30,
+          "label": "34 ohm"
+        },
+        {
+          "value": 31,
+          "label": "32 ohm"
+        },
+        {
+          "value": 60,
+          "label": "30 Ohm"
+        },
+        {
+          "value": 61,
+          "label": "28 ohm"
+        },
+        {
+          "value": 62,
+          "label": "26 ohm"
+        },
+        {
+          "value": 63,
+          "label": "25 ohm"
+        }
+      ]
+    },
+    {
+      "row": "DramDqDs",
+      "aodOffset": 141,
+      "cbsOffset": 366,
+      "aodOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 2,
+          "label": "48 ohm"
+        },
+        {
+          "value": 1,
+          "label": "40 ohm"
+        },
+        {
+          "value": 0,
+          "label": "34 ohm"
+        }
+      ],
+      "cbsOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 2,
+          "label": "48 ohm"
+        },
+        {
+          "value": 1,
+          "label": "40 ohm"
+        },
+        {
+          "value": 0,
+          "label": "34 ohm"
+        }
+      ]
+    },
+    {
+      "row": "RttNomWr",
+      "aodOffset": 142,
+      "cbsOffset": 359,
+      "aodOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "RTT_OFF"
+        },
+        {
+          "value": 1,
+          "label": "RZQ (240)"
+        },
+        {
+          "value": 2,
+          "label": "RZQ/2 (120)"
+        },
+        {
+          "value": 3,
+          "label": "RZQ/3 (80)"
+        },
+        {
+          "value": 4,
+          "label": "RZQ/4 (60)"
+        },
+        {
+          "value": 5,
+          "label": "RZQ/5 (48)"
+        },
+        {
+          "value": 6,
+          "label": "RZQ/6 (40)"
+        },
+        {
+          "value": 7,
+          "label": "RZQ/7 (34)"
+        }
+      ],
+      "cbsOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "RTT_OFF"
+        },
+        {
+          "value": 1,
+          "label": "RZQ (240)"
+        },
+        {
+          "value": 2,
+          "label": "RZQ/2 (120)"
+        },
+        {
+          "value": 3,
+          "label": "RZQ/3 (80)"
+        },
+        {
+          "value": 4,
+          "label": "RZQ/4 (60)"
+        },
+        {
+          "value": 5,
+          "label": "RZQ/5 (48)"
+        },
+        {
+          "value": 6,
+          "label": "RZQ/6 (40)"
+        },
+        {
+          "value": 7,
+          "label": "RZQ/7 (34)"
+        }
+      ]
+    },
+    {
+      "row": "RttNomRd",
+      "aodOffset": 143,
+      "cbsOffset": 360,
+      "aodOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "RTT_OFF"
+        },
+        {
+          "value": 1,
+          "label": "RZQ (240)"
+        },
+        {
+          "value": 2,
+          "label": "RZQ/2 (120)"
+        },
+        {
+          "value": 3,
+          "label": "RZQ/3 (80)"
+        },
+        {
+          "value": 4,
+          "label": "RZQ/4 (60)"
+        },
+        {
+          "value": 5,
+          "label": "RZQ/5 (48)"
+        },
+        {
+          "value": 6,
+          "label": "RZQ/6 (40)"
+        },
+        {
+          "value": 7,
+          "label": "RZQ/7 (34)"
+        }
+      ],
+      "cbsOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "RTT_OFF"
+        },
+        {
+          "value": 1,
+          "label": "RZQ (240)"
+        },
+        {
+          "value": 2,
+          "label": "RZQ/2 (120)"
+        },
+        {
+          "value": 3,
+          "label": "RZQ/3 (80)"
+        },
+        {
+          "value": 4,
+          "label": "RZQ/4 (60)"
+        },
+        {
+          "value": 5,
+          "label": "RZQ/5 (48)"
+        },
+        {
+          "value": 6,
+          "label": "RZQ/6 (40)"
+        },
+        {
+          "value": 7,
+          "label": "RZQ/7 (34)"
+        }
+      ]
+    },
+    {
+      "row": "RttWr",
+      "aodOffset": 144,
+      "cbsOffset": 361,
+      "aodOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "RTT_OFF"
+        },
+        {
+          "value": 1,
+          "label": "RZQ (240)"
+        },
+        {
+          "value": 2,
+          "label": "RZQ/2 (120)"
+        },
+        {
+          "value": 3,
+          "label": "RZQ/3 (80)"
+        },
+        {
+          "value": 4,
+          "label": "RZQ/4 (60)"
+        },
+        {
+          "value": 5,
+          "label": "RZQ/5 (48)"
+        },
+        {
+          "value": 6,
+          "label": "RZQ/6 (40)"
+        },
+        {
+          "value": 7,
+          "label": "RZQ/7 (34)"
+        }
+      ],
+      "cbsOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "RTT_OFF"
+        },
+        {
+          "value": 1,
+          "label": "RZQ (240)"
+        },
+        {
+          "value": 2,
+          "label": "RZQ/2 (120)"
+        },
+        {
+          "value": 3,
+          "label": "RZQ/3 (80)"
+        },
+        {
+          "value": 4,
+          "label": "RZQ/4 (60)"
+        },
+        {
+          "value": 5,
+          "label": "RZQ/5 (48)"
+        },
+        {
+          "value": 6,
+          "label": "RZQ/6 (40)"
+        },
+        {
+          "value": 7,
+          "label": "RZQ/7 (34)"
+        }
+      ]
+    },
+    {
+      "row": "RttPark",
+      "aodOffset": 145,
+      "cbsOffset": 362,
+      "aodOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "RTT_OFF"
+        },
+        {
+          "value": 1,
+          "label": "RZQ (240)"
+        },
+        {
+          "value": 2,
+          "label": "RZQ/2 (120)"
+        },
+        {
+          "value": 3,
+          "label": "RZQ/3 (80)"
+        },
+        {
+          "value": 4,
+          "label": "RZQ/4 (60)"
+        },
+        {
+          "value": 5,
+          "label": "RZQ/5 (48)"
+        },
+        {
+          "value": 6,
+          "label": "RZQ/6 (40)"
+        },
+        {
+          "value": 7,
+          "label": "RZQ/7 (34)"
+        }
+      ],
+      "cbsOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "RTT_OFF"
+        },
+        {
+          "value": 1,
+          "label": "RZQ (240)"
+        },
+        {
+          "value": 2,
+          "label": "RZQ/2 (120)"
+        },
+        {
+          "value": 3,
+          "label": "RZQ/3 (80)"
+        },
+        {
+          "value": 4,
+          "label": "RZQ/4 (60)"
+        },
+        {
+          "value": 5,
+          "label": "RZQ/5 (48)"
+        },
+        {
+          "value": 6,
+          "label": "RZQ/6 (40)"
+        },
+        {
+          "value": 7,
+          "label": "RZQ/7 (34)"
+        }
+      ]
+    },
+    {
+      "row": "RttParkDqs",
+      "aodOffset": 146,
+      "cbsOffset": 363,
+      "aodOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "RTT_OFF"
+        },
+        {
+          "value": 1,
+          "label": "RZQ (240)"
+        },
+        {
+          "value": 2,
+          "label": "RZQ/2 (120)"
+        },
+        {
+          "value": 3,
+          "label": "RZQ/3 (80)"
+        },
+        {
+          "value": 4,
+          "label": "RZQ/4 (60)"
+        },
+        {
+          "value": 5,
+          "label": "RZQ/5 (48)"
+        },
+        {
+          "value": 6,
+          "label": "RZQ/6 (40)"
+        },
+        {
+          "value": 7,
+          "label": "RZQ/7 (34)"
+        }
+      ],
+      "cbsOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "RTT_OFF"
+        },
+        {
+          "value": 1,
+          "label": "RZQ (240)"
+        },
+        {
+          "value": 2,
+          "label": "RZQ/2 (120)"
+        },
+        {
+          "value": 3,
+          "label": "RZQ/3 (80)"
+        },
+        {
+          "value": 4,
+          "label": "RZQ/4 (60)"
+        },
+        {
+          "value": 5,
+          "label": "RZQ/5 (48)"
+        },
+        {
+          "value": 6,
+          "label": "RZQ/6 (40)"
+        },
+        {
+          "value": 7,
+          "label": "RZQ/7 (34)"
+        }
+      ]
+    },
+    {
+      "row": "PwrDwn",
+      "aodOffset": 147,
+      "cbsOffset": 367,
+      "aodOptions": [
+        {
+          "value": 0,
+          "label": "Disabled"
+        },
+        {
+          "value": 1,
+          "label": "Enabled"
+        },
+        {
+          "value": 255,
+          "label": "Auto"
+        }
+      ],
+      "cbsOptions": [
+        {
+          "value": 0,
+          "label": "Disabled"
+        },
+        {
+          "value": 1,
+          "label": "Enabled"
+        },
+        {
+          "value": 255,
+          "label": "Auto"
+        }
+      ]
+    },
+    {
+      "row": "FCLK",
+      "aodOffset": 148,
+      "cbsOffset": 608,
+      "aodOptions": [
+        {
+          "value": 65535,
+          "label": "Auto"
+        },
+        {
+          "value": 100,
+          "label": "100 MHz"
+        },
+        {
+          "value": 200,
+          "label": "200 MHz"
+        },
+        {
+          "value": 400,
+          "label": "400 MHz"
+        },
+        {
+          "value": 500,
+          "label": "500 MHz"
+        },
+        {
+          "value": 800,
+          "label": "800 MHz"
+        },
+        {
+          "value": 933,
+          "label": "933 MHz"
+        },
+        {
+          "value": 1100,
+          "label": "1100 MHz"
+        },
+        {
+          "value": 1120,
+          "label": "1120 MHz"
+        },
+        {
+          "value": 1143,
+          "label": "1143 MHz"
+        },
+        {
+          "value": 1200,
+          "label": "1200 MHz"
+        },
+        {
+          "value": 1250,
+          "label": "1250 MHz"
+        },
+        {
+          "value": 1257,
+          "label": "1257 MHz"
+        },
+        {
+          "value": 1280,
+          "label": "1280 MHz"
+        },
+        {
+          "value": 1300,
+          "label": "1300 MHz"
+        },
+        {
+          "value": 1320,
+          "label": "1320 MHz"
+        },
+        {
+          "value": 1333,
+          "label": "1333 MHz"
+        },
+        {
+          "value": 1371,
+          "label": "1371 MHz"
+        },
+        {
+          "value": 1400,
+          "label": "1400 MHz"
+        },
+        {
+          "value": 1440,
+          "label": "1440 MHz"
+        },
+        {
+          "value": 1467,
+          "label": "1467 MHz"
+        },
+        {
+          "value": 1485,
+          "label": "1485 MHz"
+        },
+        {
+          "value": 1500,
+          "label": "1500 MHz"
+        },
+        {
+          "value": 1560,
+          "label": "1560 MHz"
+        },
+        {
+          "value": 1600,
+          "label": "1600 MHz"
+        },
+        {
+          "value": 1650,
+          "label": "1650 MHz"
+        },
+        {
+          "value": 1680,
+          "label": "1680 MHz"
+        },
+        {
+          "value": 1733,
+          "label": "1733 MHz"
+        },
+        {
+          "value": 1750,
+          "label": "1750 MHz"
+        },
+        {
+          "value": 1760,
+          "label": "1760 MHz"
+        },
+        {
+          "value": 1800,
+          "label": "1800 MHz"
+        },
+        {
+          "value": 2000,
+          "label": "2000 MHz"
+        },
+        {
+          "value": 2033,
+          "label": "2033 MHz"
+        },
+        {
+          "value": 2067,
+          "label": "2067 MHz"
+        },
+        {
+          "value": 2100,
+          "label": "2100 MHz"
+        },
+        {
+          "value": 2133,
+          "label": "2133 MHz"
+        },
+        {
+          "value": 2167,
+          "label": "2167 MHz"
+        },
+        {
+          "value": 2200,
+          "label": "2200 MHz"
+        },
+        {
+          "value": 2233,
+          "label": "2233 MHz"
+        },
+        {
+          "value": 2267,
+          "label": "2267 MHz"
+        },
+        {
+          "value": 2400,
+          "label": "2400 MHz"
+        },
+        {
+          "value": 2433,
+          "label": "2433 MHz"
+        },
+        {
+          "value": 2467,
+          "label": "2467 MHz"
+        },
+        {
+          "value": 2500,
+          "label": "2500 MHz"
+        },
+        {
+          "value": 2550,
+          "label": "2550 MHz"
+        },
+        {
+          "value": 2600,
+          "label": "2600 MHz"
+        },
+        {
+          "value": 2650,
+          "label": "2650 MHz"
+        },
+        {
+          "value": 2700,
+          "label": "2700 MHz"
+        },
+        {
+          "value": 2750,
+          "label": "2750 MHz"
+        },
+        {
+          "value": 2800,
+          "label": "2800 MHz"
+        },
+        {
+          "value": 2850,
+          "label": "2850 MHz"
+        },
+        {
+          "value": 2900,
+          "label": "2900 MHz"
+        },
+        {
+          "value": 2950,
+          "label": "2950 MHz"
+        },
+        {
+          "value": 3000,
+          "label": "3000 MHz"
+        }
+      ],
+      "cbsOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 0,
+          "label": "100 MHz"
+        },
+        {
+          "value": 1,
+          "label": "200 MHz"
+        },
+        {
+          "value": 2,
+          "label": "400 MHz"
+        },
+        {
+          "value": 3,
+          "label": "500 MHz"
+        },
+        {
+          "value": 4,
+          "label": "667 MHz"
+        },
+        {
+          "value": 5,
+          "label": "800 MHz"
+        },
+        {
+          "value": 6,
+          "label": "933 MHz"
+        },
+        {
+          "value": 7,
+          "label": "1067 MHz"
+        },
+        {
+          "value": 8,
+          "label": "1100 MHz"
+        },
+        {
+          "value": 9,
+          "label": "1120 MHz"
+        },
+        {
+          "value": 10,
+          "label": "1143 MHz"
+        },
+        {
+          "value": 11,
+          "label": "1200 MHz"
+        },
+        {
+          "value": 12,
+          "label": "1250 MHz"
+        },
+        {
+          "value": 13,
+          "label": "1257 MHz"
+        },
+        {
+          "value": 14,
+          "label": "1280 MHz"
+        },
+        {
+          "value": 15,
+          "label": "1300 MHz"
+        },
+        {
+          "value": 16,
+          "label": "1320 MHz"
+        },
+        {
+          "value": 17,
+          "label": "1333 MHz"
+        },
+        {
+          "value": 18,
+          "label": "1367 MHz"
+        },
+        {
+          "value": 19,
+          "label": "1371 MHz"
+        },
+        {
+          "value": 20,
+          "label": "1400 MHz"
+        },
+        {
+          "value": 21,
+          "label": "1433 MHz"
+        },
+        {
+          "value": 22,
+          "label": "1440 MHz"
+        },
+        {
+          "value": 23,
+          "label": "1467 MHz"
+        },
+        {
+          "value": 24,
+          "label": "1485 MHz"
+        },
+        {
+          "value": 25,
+          "label": "1500 MHz"
+        },
+        {
+          "value": 26,
+          "label": "1533 MHz"
+        },
+        {
+          "value": 27,
+          "label": "1560 MHz"
+        },
+        {
+          "value": 28,
+          "label": "1567 MHz"
+        },
+        {
+          "value": 29,
+          "label": "1600 MHz"
+        },
+        {
+          "value": 30,
+          "label": "1633 MHz"
+        },
+        {
+          "value": 31,
+          "label": "1650 MHz"
+        },
+        {
+          "value": 32,
+          "label": "1667 MHz"
+        },
+        {
+          "value": 33,
+          "label": "1680 MHz"
+        },
+        {
+          "value": 34,
+          "label": "1700 MHz"
+        },
+        {
+          "value": 35,
+          "label": "1733 MHz"
+        },
+        {
+          "value": 36,
+          "label": "1750 MHz"
+        },
+        {
+          "value": 37,
+          "label": "1760 MHz"
+        },
+        {
+          "value": 38,
+          "label": "1767 MHz"
+        },
+        {
+          "value": 39,
+          "label": "1800 MHz"
+        },
+        {
+          "value": 40,
+          "label": "1833 MHz"
+        },
+        {
+          "value": 41,
+          "label": "1867 MHz"
+        },
+        {
+          "value": 42,
+          "label": "1900 MHz"
+        },
+        {
+          "value": 43,
+          "label": "1920 MHz"
+        },
+        {
+          "value": 44,
+          "label": "1933 MHz"
+        },
+        {
+          "value": 45,
+          "label": "1950 MHz"
+        },
+        {
+          "value": 46,
+          "label": "1960 MHz"
+        },
+        {
+          "value": 47,
+          "label": "1967 MHz"
+        },
+        {
+          "value": 48,
+          "label": "2000 MHz"
+        },
+        {
+          "value": 49,
+          "label": "2033 MHz"
+        },
+        {
+          "value": 50,
+          "label": "2067 MHz"
+        },
+        {
+          "value": 51,
+          "label": "2100 MHz"
+        },
+        {
+          "value": 52,
+          "label": "2133 MHz"
+        },
+        {
+          "value": 53,
+          "label": "2167 MHz"
+        },
+        {
+          "value": 54,
+          "label": "2200 MHz"
+        },
+        {
+          "value": 55,
+          "label": "2233 MHz"
+        },
+        {
+          "value": 56,
+          "label": "2267 MHz"
+        },
+        {
+          "value": 57,
+          "label": "2300 MHz"
+        },
+        {
+          "value": 58,
+          "label": "2333 MHz"
+        },
+        {
+          "value": 59,
+          "label": "2367 MHz"
+        },
+        {
+          "value": 60,
+          "label": "2400 MHz"
+        },
+        {
+          "value": 61,
+          "label": "2433 MHz"
+        },
+        {
+          "value": 62,
+          "label": "2467 MHz"
+        },
+        {
+          "value": 63,
+          "label": "2500 MHz"
+        },
+        {
+          "value": 64,
+          "label": "2550 MHz"
+        },
+        {
+          "value": 65,
+          "label": "2600 MHz"
+        },
+        {
+          "value": 66,
+          "label": "2650 MHz"
+        },
+        {
+          "value": 67,
+          "label": "2700 MHz"
+        },
+        {
+          "value": 68,
+          "label": "2750 MHz"
+        },
+        {
+          "value": 69,
+          "label": "2800 MHz"
+        },
+        {
+          "value": 70,
+          "label": "2850 MHz"
+        },
+        {
+          "value": 71,
+          "label": "2900 MHz"
+        },
+        {
+          "value": 72,
+          "label": "2950 MHz"
+        },
+        {
+          "value": 73,
+          "label": "3000 MHz"
+        },
+        {
+          "value": 74,
+          "label": "333 MHz"
+        },
+        {
+          "value": 75,
+          "label": "533 MHz"
+        },
+        {
+          "value": 76,
+          "label": "1050 MHz"
+        },
+        {
+          "value": 77,
+          "label": "1066 MHz"
+        }
+      ]
+    },
+    {
+      "row": "UCLK",
+      "aodOffset": 150,
+      "cbsOffset": null,
+      "aodOptions": [
+        {
+          "value": 255,
+          "label": "Auto"
+        },
+        {
+          "value": 1,
+          "label": "UCLK=MEMCLK"
+        },
+        {
+          "value": 0,
+          "label": "UCLK=MEMCLK/2"
+        }
+      ],
+      "cbsOptions": null
+    }
+  ],
+  "voltages": [
+    {
+      "row": "MEM VDD",
+      "value": 403,
+      "gate": 402,
+      "gateOptions": [
+        1,
+        2
+      ],
+      "min": 800,
+      "max": 1430
+    },
+    {
+      "row": "MEM VDDQ",
+      "value": 405,
+      "gate": 402,
+      "gateOptions": [
+        1,
+        2
+      ],
+      "min": 800,
+      "max": 1430
+    },
+    {
+      "row": "CPU VDDIO",
+      "value": 407,
+      "gate": 402,
+      "gateOptions": [
+        1,
+        2
+      ],
+      "min": 800,
+      "max": 1430
+    },
+    {
+      "row": "MEM VPP",
+      "value": 409,
+      "gate": 411,
+      "gateOptions": [
+        1
+      ],
+      "min": 1500,
+      "max": 2130
+    },
+    {
+      "row": "VDD MISC",
+      "value": 152,
+      "gate": 151,
+      "gateOptions": [
+        1
+      ],
+      "min": 1100,
+      "max": 1650
+    }
+  ],
+  "agesaRows": [
+    "GDM",
+    "Cmd2T",
+    "tCWL",
+    "tREFI",
+    "tCKE",
+    "tSTAG",
+    "tMOD",
+    "tMODPDA",
+    "tMRD",
+    "tMRDPDA",
+    "tPHYWRD",
+    "tPHYWRL",
+    "tPHYRDL",
+    "tRDPRE",
+    "tWRPRE",
+    "Nitro",
+    "Refresh",
+    "tCCDL"
+  ],
+  "unknownRows": [
+    "BGS",
+    "BGS Alt"
+  ]
+}

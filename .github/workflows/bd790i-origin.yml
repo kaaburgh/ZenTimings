@@ -46,3 +46,41 @@ jobs:
         if: always()
         shell: pwsh
         run: msbuild WPF/ZenTimings.sln /restore /p:Configuration=Release '/p:Platform=Any CPU' /verbosity:minimal
+
+      - name: Stage portable Windows build
+        if: success()
+        shell: pwsh
+        run: |
+          $release = Join-Path $PWD 'WPF/bin/Release'
+          $exe = Join-Path $release 'ZenTimings.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            throw 'The Release build did not produce ZenTimings.exe'
+          }
+          $stage = Join-Path $PWD 'dist/ZenTimings-BD790i-PR1-Windows'
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Get-ChildItem -LiteralPath $release -Force |
+            Where-Object { $_.Extension -notin @('.pdb', '.xml') } |
+            Copy-Item -Destination $stage -Recurse -Force
+          $binary = Join-Path $stage 'ZenTimings.exe'
+          if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
+            throw 'Portable package does not contain ZenTimings.exe'
+          }
+          @(
+            'ZenTimings BD790i Manual / Auto - development build'
+            'PR: https://github.com/kaaburgh/ZenTimings/pull/1'
+            "Git commit: $env:GITHUB_SHA"
+            'Configuration: Release, Any CPU, .NET Framework 4.7.2'
+            'Not signed. Not tested on physical DRFXI hardware. Does not write UEFI variables.'
+            "ZenTimings.exe SHA256: $((Get-FileHash -Algorithm SHA256 -LiteralPath $binary).Hash)"
+          ) | Set-Content -LiteralPath (Join-Path $stage 'BUILD-INFO.txt') -Encoding UTF8
+          Write-Host 'Portable package contents:'
+          Get-ChildItem -LiteralPath $stage -Recurse -File | Select-Object FullName,Length
+
+      - name: Upload portable Windows build
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZenTimings-BD790i-PR1-Windows
+          path: dist/ZenTimings-BD790i-PR1-Windows/
+          if-no-files-found: error
+          retention-days: 14

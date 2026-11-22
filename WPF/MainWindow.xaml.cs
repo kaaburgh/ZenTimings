@@ -236,7 +236,7 @@ namespace ZenTimings
                     SplashWindow.Loading("IO Driver");
                     if (!WaitForInpoutDriverLoad())
                     {
-                        HandleError("I/O driver is not responding or not loaded.");
+                        HandleError(DescribeLegacyIoFailure());
                     }
 
                     SplashWindow.Loading("Plugins");
@@ -1015,6 +1015,30 @@ namespace ZenTimings
 
             var index = timings.FindIndex(m => m.Key.Equals(offset));
             return timings[index < 0 ? 0 : index].Value;
+        }
+
+        /// <summary>
+        /// PawnIO's SMU/SMN and SMBus reads can succeed even when the separate legacy
+        /// InpOut native DLL is missing or its kernel driver is blocked. AOD/APOB
+        /// physical-memory reads still depend on that component in this core revision.
+        /// </summary>
+        private string DescribeLegacyIoFailure()
+        {
+            string nativeName = Environment.Is64BitProcess ? "inpoutx64.dll" : "WinIo32.dll";
+            string nativePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, nativeName);
+            if (!File.Exists(nativePath))
+                return "Native I/O dependency " + nativeName + " is missing from the ZenTimings folder."
+                    + "\nAPOB and AOD readings are unavailable."
+                    + "\nExtract the complete portable ZIP; do not run ZenTimings.exe by itself.";
+
+            if (cpu?.io == null)
+                return "Native I/O library " + nativeName + " is present but could not be initialized."
+                    + "\nAPOB and AOD readings are unavailable."
+                    + "\nWindows may block legacy InpOut drivers. Do not disable Windows driver protection to use ZenTimings.";
+
+            return "Native I/O library " + nativeName + " loaded but its kernel driver did not respond."
+                + "\nAPOB and AOD readings are unavailable."
+                + "\nCheck Windows driver and Code Integrity events; do not disable Windows security protections.";
         }
 
         private bool WaitForInpoutDriverLoad()

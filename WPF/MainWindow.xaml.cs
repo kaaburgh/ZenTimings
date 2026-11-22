@@ -25,6 +25,7 @@ using ZenStates.Core.Hardware.Mock;
 using ZenStates.Core.OHWM;
 using ZenTimings.Common;
 using ZenTimings.Controls;
+using ZenTimings.BiosOrigin;
 using ZenTimings.Export;
 using ZenTimings.Helpers;
 using ZenTimings.Plugin;
@@ -267,6 +268,11 @@ namespace ZenTimings
                     GetAgesaVersion(),
                     ModulePmicData(0)
                 );
+
+                // Read the two UEFI setup variables only for the supported DRFXI BIOS versions.
+                // An unsupported layout / failed read is non-fatal and cannot produce misleading Manual badges.
+                mainViewModel.SettingOrigins = DrfxiSettingOrigins.ReadFromFirmware(
+                    cpu.systemInfo?.MbName, cpu.systemInfo?.BiosVersion);
 
                 DataContext = mainViewModel;
 
@@ -1847,6 +1853,13 @@ namespace ZenTimings
             mainViewModel.RefreshUclkLabel();
         }
 
+        private void ShowSettingOriginMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            // The checked state is already written to AppSettings by the TwoWay binding.
+            // TimingRow observes PropertyChanged and immediately updates its badge visibility.
+            settings.Save();
+        }
+
         private void SpdInfoToolstripMenuItem_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -2077,6 +2090,7 @@ namespace ZenTimings
             return new SnapshotSource
             {
                 BiosMemConfig = BMC?.Config,
+                SettingOrigins = mainViewModel?.SettingOrigins,
                 AsusSensors = AsusWmi?.sensors,
                 Plugins = plugins,
                 LastRefreshUtc = lastRefreshUtc,
@@ -2231,6 +2245,9 @@ namespace ZenTimings
                     mockData.PmicData,
                     mockData
                 );
+                // Never consult the live host while displaying an offline debug report.
+                viewModel.SettingOrigins = DrfxiSettingOrigins.FromDebugReport(
+                    mockData.MbName, mockData.BiosVersion, debugReportText);
 
                 MainWindow mockWindow = new MainWindow(viewModel, mockData)
                 {

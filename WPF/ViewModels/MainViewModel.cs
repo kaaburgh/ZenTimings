@@ -10,6 +10,7 @@ using ZenStates.Core.Hardware.DRAM;
 using ZenStates.Core.Hardware.DRAM.DDR5.Pmic;
 using ZenStates.Core.Hardware.Mock;
 using ZenTimings.Common;
+using ZenTimings.BiosOrigin;
 using ZenTimings.Plugin;
 using ZenTimings.Settings;
 using ZenTimings.Utils;
@@ -47,6 +48,14 @@ namespace ZenTimings.ViewModels
                 OnPropertyChanged();
             }
         }
+        private SettingOriginReport _settingOrigins;
+        /// <summary>Verified BIOS setup sources, independent of the live register readings.</summary>
+        public SettingOriginReport SettingOrigins
+        {
+            get => _settingOrigins;
+            set => SetProperty(ref _settingOrigins, value);
+        }
+
         public AppSettings Settings { get; }
         public List<IPlugin> Plugins { get; }
 
@@ -331,7 +340,7 @@ namespace ZenTimings.ViewModels
         // in the "Capacity" row instead of the whole kit's TotalCapacity.
         public MainViewModel CreateChannelViewModel(BaseDramTimings timings, Ddr5Pmic pmicData, Capacity capacityOverride)
         {
-            return new MainViewModel(
+            var channelModel = new MainViewModel(
                 timings,
                 MemoryType,
                 false,
@@ -342,6 +351,8 @@ namespace ZenTimings.ViewModels
                 pmicData,
                 mockData,
                 capacityOverride);
+            channelModel.SettingOrigins = SettingOrigins;
+            return channelModel;
         }
 
         public MainViewModel(

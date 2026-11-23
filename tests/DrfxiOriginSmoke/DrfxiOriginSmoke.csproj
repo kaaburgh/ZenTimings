@@ -26,6 +26,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="..\..\WPF\Windows\BiosMemoryControllerDebug.cs">
+      <Link>BiosMemoryControllerDebug.cs</Link>
+    </Compile>
     <Compile Include="..\..\WPF\BiosOrigin\DrfxiSettingOrigins.cs">
       <Link>DrfxiSettingOrigins.cs</Link>
     </Compile>

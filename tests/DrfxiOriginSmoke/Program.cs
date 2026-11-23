@@ -80,6 +80,12 @@ internal static class Program
             "unsupported board never chooses a layout");
         Check(catalog115.Resolver == "drfxi-dragonrange-v1"
             && catalog115.Variables.Count == 2, "catalog specifies trusted resolver and varstores");
+        Check(BiosOriginLayoutCatalog.MayDisplayOrigins("verified")
+            && BiosOriginLayoutCatalog.MayDisplayOrigins("derived"),
+            "only deterministic catalog evidence tiers are eligible for display");
+        Check(!BiosOriginLayoutCatalog.MayDisplayOrigins("ai-proposed")
+            && !BiosOriginLayoutCatalog.MayDisplayOrigins(null),
+            "AI-proposed or unknown catalog evidence never silently enables badges");
         var fingerprintBlobs = new System.Collections.Generic.Dictionary<string, byte[]>(
             StringComparer.OrdinalIgnoreCase) { { "AmdSetupRPL", cbs }, { "AodSetupRpl", aod } };
         Check(catalog115.CheckFingerprint(fingerprintBlobs) == null,
@@ -268,6 +274,11 @@ internal static class Program
         Console.WriteLine("Offline replay: " + replay.Status);
         Check(replay.IsMatched,
             "offline debug report reproduces origin data");
+        Check(replay.Status.Contains("catalog status=verified"),
+            "offline replay discloses catalog evidence tier");
+        Check(replay.Find("Speed").Details.Contains("Layout catalog:")
+            && replay.Find("Speed").Details.Contains("Verified against"),
+            "origin tooltip discloses verified catalog provenance");
 
         // The DDR5 debug report previously dereferenced BMC.Table even though BMC was null.
         Check(BiosMemoryControllerDebug.Dump(null, false).Single().StartsWith("Not applicable:"),

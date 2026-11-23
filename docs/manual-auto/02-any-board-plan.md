@@ -10,7 +10,7 @@ Goal: the origin column on any AMD board ZenTimings supports, without hand-writt
 - A catalog candidate must pass full varstore fingerprint checking **and** the unchanged IFR-derived field plausibility checks before any origin badge can be shown.
 - The same resolution and validation are applied to live firmware reads and offline debug-report replay; unknown board/version, missing/invalid varstores or unknown resolver fail closed.
 - `verified` and `derived` are displayed as distinct evidence tiers. `ai-proposed` is rejected by the runtime without a promotion step; no remote catalog retrieval or automatic opt-in is implemented.
-- Current catalog coverage is intentionally only DRFXI 1.15 (verified once on hardware) and 1.17 (derived from IFR; hardware check pending). **This is not general support for other AMD systems.**
+- Initial catalog coverage was DRFXI 1.15 (verified once on hardware) and 1.17 (derived). Stacked PR #5 adds MSI MAG B650 TOMAHAWK 1E5/1E0 as `derived` through a shared mapping and per-release fingerprints. This is not arbitrary AMD-system support.
 
 **Not implemented in M2a:** BIOS image import, FV/FFS/IFR extraction, arbitrary firmware semantics, image-hash cache and AGESA runtime matching, diagnostics GitHub issue form, generic APCB flash reader, and AI-assisted CI. The present catalog entry uses board/BIOS selection followed by varstore fingerprints; adding an AGESA field to the key requires a reliable runtime AGESA source. M2b should first build the deterministic offline extractor with fixture-based tests (from the research repo), then wire an explicit user-selected image into the desktop app without auto-downloads.
 
@@ -123,7 +123,7 @@ Gain: vendor OC menus that write standard tokens are covered without per-vendor 
 
 ## 7. Coverage tiers
 
-First non-DRFXI board experiment: [MSI MAG B650 TOMAHAWK WIFI (MS-7D75), BIOS 7D75v1E](msi-mag-b650-tomahawk-7d75v1e.md). The first resolver is deliberately `derived`: CBS timing offsets are IFR-mapped, while AOD runtime availability, MSI EXPO application, and AOD/CBS precedence still require a real hardware readout. Unknown is preferred over guessing.
+First non-DRFXI board experiment: [MSI MAG B650 TOMAHAWK WIFI (MS-7D75), BIOS 7D75v1E5 and 7D75v1E](msi-mag-b650-tomahawk-7d75v1e.md). Both releases reuse one IFR timing mapping; the selected release overrides `Setup` size (1E5 `0x7C2`, 1E0 `0x7C4`). Both remain `derived`, because AOD runtime availability, MSI EXPO application and AOD/CBS precedence still require a hardware readout. Unknown is preferred over guessing.
 
 
 | Tier | Boards | Expected path | Effort per new BIOS family |

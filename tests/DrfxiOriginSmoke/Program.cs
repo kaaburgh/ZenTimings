@@ -92,6 +92,7 @@ internal static class Program
         fingerprintBlobs["AmdSetupRPL"] = new byte[20];
         Check(catalog115.CheckFingerprint(fingerprintBlobs)?.Contains("size") == true,
             "incorrect varstore size rejects catalog fingerprint");
+        fingerprintBlobs["AmdSetupRPL"] = cbs;
         fingerprintBlobs.Remove("AodSetupRpl");
         Check(catalog115.CheckFingerprint(fingerprintBlobs)?.Contains("missing") == true,
             "missing varstore rejects catalog fingerprint");

@@ -47,7 +47,8 @@ namespace ZenTimings.BiosOrigin
                     Plausibility = "passed",
                     Status = "matched (MSI 7D75v1E IFR-derived saved setup; hardware validation pending)",
                     AmdSetup = (byte[])amd.Clone(),
-                    AodSetup = aodAvailable ? (byte[])aod.Clone() : null
+                    AodSetup = aodAvailable ? (byte[])aod.Clone() : null,
+                    Setup = setupAvailable ? (byte[])setup.Clone() : null
                 };
 
                 foreach (TimingField field in layout.Timings)

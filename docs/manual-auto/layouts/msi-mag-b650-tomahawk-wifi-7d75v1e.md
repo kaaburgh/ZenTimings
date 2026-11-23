@@ -62,7 +62,7 @@ The BIOS includes separate Raphael and Phoenix CBS formsets and varstores.
 
 For both CBS formsets, timing controls are one byte and values are 16-bit, with the value immediately following its control. The full ordered control/value maps are in the machine-readable JSON next to this document. The Raphael map begins at `tCL 0x119/0x11A`; Phoenix begins at `tCL 0x061/0x062`.
 
-The Raphael timing offsets happen to overlap the first part of the DRFXI CBS map. That is not a sufficient fingerprint: this image's RPL varstore is `0x779` bytes, versus DRFXI's `0x6D5`, and the DRFXI signature/generation header is absent. The Phoenix store is `0x831` bytes. The DRFXI resolver must not be reused.
+The Raphael timing offsets happen to overlap the first part of the DRFXI CBS map. That is not a sufficient fingerprint: this image's RPL varstore is `0x779` bytes, versus DRFXI's `0x6D5`, and its first three 32-bit words at offsets `0x00`, `0x04`, and `0x08` are all zero in StdDefaults (not DRFXI's `0xFC4053AA` / `728` / `0x4B9D5809` header). The Phoenix store is `0x831` bytes and has the same zeroed first three words. The DRFXI resolver must not be reused.
 
 ## AMD AOD maps
 
@@ -82,7 +82,7 @@ The complete timing maps are recorded in the JSON. AodSmm contains the strings `
 ## Why this remains ai-proposed
 
 1. MSI Setup, AMD CBS, and AMD AOD expose overlapping memory controls. IFR tells us what the menus store, not which path wins when multiple menus contain settings.
-2. The MSI-specific apply path in `MsiOcDxe`, `MsiOcSmi`, `MsiOcMemSPDDxe`, and `MsiOcMemSPDPei` has not been fully traced.
+2. The MSI-specific apply path in `MsiOcDxe`, `MsiOcSmi`, `MsiOcMemSPDDxe`, and `MsiOcMemSPDPei` has not been fully traced. `MsiOcMemSPDDxe` also contains identifiers such as `MsiOcMemSpdData`, `MsiOcMemSpdXMPInfo`, `MsiOcUserXMPProfile`, `MsiOcMemSpdCheckSum`, `MsiOcMemPatchID`, `MsiOcMemPmicInfo`, and `MsiOcMemECCInfo`; their GUIDs, storage formats, and apply semantics remain unresolved.
 3. RPL and PHX use different CBS/AOD varstores and offsets. `MsiOcInfoFlag` gates the UI paths, but its selector values have not yet been mapped to CPU families.
 4. The AOD variables are not in the image's default NVAR list, so their runtime presence/attributes need to be checked on the board.
 5. There is no live MSI hardware readout to compare against ZenTimings values or APCB tokens.

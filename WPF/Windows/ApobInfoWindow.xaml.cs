@@ -337,9 +337,12 @@ namespace ZenTimings.Windows
 
         private bool FillTrainingOdt()
         {
-            List<ApobChannelTimings> blocks = _apob.ChannelTimings?.Where(b => b.ExtendedData != null).ToList();
-            if (blocks == null || blocks.Count == 0)
+            List<ApobChannelTimings> allBlocks = _apob.ChannelTimings?
+                .Where(b => b.ExtendedData != null).ToList();
+            if (allBlocks == null || allBlocks.Count == 0)
             {
+                ShowInactiveTrainingOdtCheckBox.Visibility = Visibility.Collapsed;
+
                 // Older search result: the extended block of the first channel
                 if (_apob.ExtendedData == null)
                     return false;
@@ -349,12 +352,28 @@ namespace ZenTimings.Windows
                 return single.Count > 0;
             }
 
+            bool activeClockKnown = _apob.ActiveMemClk > 0;
+            bool hasActiveAndInactive = activeClockKnown
+                && allBlocks.Any(b => b.IsActive) && allBlocks.Any(b => !b.IsActive);
+            ShowInactiveTrainingOdtCheckBox.Visibility = hasActiveAndInactive
+                ? Visibility.Visible : Visibility.Collapsed;
+
+            List<ApobChannelTimings> blocks = ApobTimingBlockVisibility.SelectVisible(
+                allBlocks, b => b.IsActive, activeClockKnown,
+                ShowInactiveTrainingOdtCheckBox.IsChecked == true);
             List<Row> rows = DataRows(blocks.Select(b => (object)b.ExtendedData).ToList(), blocks);
             if (rows.Count == 0)
                 return false;
 
-            SetupGrid(TrainingOdtGrid, "Setting", BlockHeaders(blocks), rows, 150);
+            SetupGrid(TrainingOdtGrid, "Setting",
+                BlockHeaders(blocks, allBlocks.Any(b => b.PState > 0)), rows, 150);
             return true;
+        }
+
+        private void ShowInactiveTrainingOdtChanged(object sender, RoutedEventArgs e)
+        {
+            if (_apob != null && _apob.IsAvailable)
+                Run(TrainingOdtSection, FillTrainingOdt);
         }
 
         private bool FillDimms()

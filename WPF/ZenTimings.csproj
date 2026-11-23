@@ -106,6 +106,7 @@
     </Compile>
     <Compile Include="Converters\CountToVisibilityConverter.cs" />
     <Compile Include="BiosOrigin\DrfxiSettingOrigins.cs" />
+    <Compile Include="Windows\BiosMemoryControllerDebug.cs" />
     <Compile Include="Export\CoreOptionsScope.cs" />
     <Compile Include="Export\SnapshotHtmlWriter.cs" />
     <Compile Include="Helpers\AgesaHelper.cs" />

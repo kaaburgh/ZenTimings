@@ -29,9 +29,15 @@
     <Compile Include="..\..\WPF\Windows\BiosMemoryControllerDebug.cs">
       <Link>BiosMemoryControllerDebug.cs</Link>
     </Compile>
+    <Compile Include="..\..\WPF\BiosOrigin\BiosOriginLayoutCatalog.cs">
+      <Link>BiosOriginLayoutCatalog.cs</Link>
+    </Compile>
     <Compile Include="..\..\WPF\BiosOrigin\DrfxiSettingOrigins.cs">
       <Link>DrfxiSettingOrigins.cs</Link>
     </Compile>
+    <EmbeddedResource Include="..\..\WPF\Resources\BiosLayouts\catalog-v1.json">
+      <LogicalName>ZenTimings.Resources.BiosLayouts.catalog-v1.json</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="..\..\WPF\Resources\BiosLayouts\drfxi-dragonrange-v1.json">
       <LogicalName>ZenTimings.Resources.BiosLayouts.drfxi-dragonrange-v1.json</LogicalName>
     </EmbeddedResource>

@@ -23,7 +23,7 @@ The image was parsed offline with the project UEFI toolchain. The following IFR 
 | `AodSetupRpl` | `5ED15DC0-EDEF-4161-9151-6014C4CC630C` | `0x320` (800) | AMD Overclocking / AOD settings |
 | `Setup` | `EC87D643-EBA4-4BB5-A1E5-3F3E36B20DA9` | `0x7C4` (1988) | MSI setup, OC menu and profile selectors |
 
-Important distinction: the external `StdDefaults` NVRAM block contains defaults for `AmdSetupRPL` and `Setup`, but no `AodSetupRpl` default entry. The AOD driver nevertheless declares the `AodSetupRpl` varstore in IFR. This does not prove that the runtime variable is absent; its availability must be checked on the physical board. Accordingly, AOD and MSI Setup variables are optional in the catalog and missing data does not get interpreted as Auto.
+Important distinction: the external `StdDefaults` NVRAM block contains defaults for `AmdSetupRPL` and `Setup`, but no `AodSetupRpl` default entry. The AOD driver nevertheless declares the `AodSetupRpl` varstore in IFR. This does not prove that the runtime variable is absent; its availability must be checked on the physical board. `Setup` is also optional until runtime read access is confirmed. Accordingly, missing AOD or Setup data does not get interpreted as Auto.
 
 ## Memory timing fields
 

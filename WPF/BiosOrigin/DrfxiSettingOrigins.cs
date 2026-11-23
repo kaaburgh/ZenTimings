@@ -193,9 +193,6 @@ namespace ZenTimings.BiosOrigin
     public static class DrfxiSettingOrigins
     {
         public const string LayoutResource = "ZenTimings.Resources.BiosLayouts.drfxi-dragonrange-v1.json";
-        private const string AmdGuid = "{3a997502-647a-4c82-998e-52ef9486a247}";
-        private const string AodGuid = "{5ed15dc0-edef-4161-9151-6014c4cc630c}";
-
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "GetFirmwareEnvironmentVariableExW")]
         private static extern uint GetFirmwareEnvironmentVariableEx(
             string name, string guid, byte[] buffer, uint size, out uint attributes);
@@ -276,44 +273,83 @@ namespace ZenTimings.BiosOrigin
 
         public static SettingOriginReport ReadFromFirmware(string board, string biosVersion)
         {
-            if (string.IsNullOrEmpty(board) || board.IndexOf("DRFXI", StringComparison.OrdinalIgnoreCase) < 0
-                || !Regex.IsMatch(biosVersion ?? "", @"(?:^|\D)1\.(15|17)(?:\D|$)"))
-                return Unavailable("Unsupported motherboard / BIOS; requires DRFXI 1.15 or 1.17.");
-
-            if (Environment.OSVersion.Platform != PlatformID.Win32NT)
-                return Unavailable("Windows UEFI API is not available on this OS.");
-
             try
             {
+                var candidate = BiosOriginLayoutCatalog.Select(board, biosVersion);
+                if (candidate == null)
+                    return Unavailable("No supported origin layout catalog entry for this board / BIOS.");
+                if (candidate.Resolver != "drfxi-dragonrange-v1")
+                    return Unavailable("Origin layout has no trusted resolver: " + candidate.LayoutId);
+                if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+                    return Unavailable("Windows UEFI API is not available on this OS.");
+
                 int privilegeError = EnablePrivilege();
                 if (privilegeError != 0)
                     return Unavailable("Cannot enable firmware-read privilege: " + ErrorMeaning(privilegeError));
 
-                uint amdAttrs, aodAttrs;
-                int amdError, aodError;
-                byte[] amd = ReadVariable("AmdSetupRPL", AmdGuid, out amdAttrs, out amdError);
-                byte[] aod = ReadVariable("AodSetupRpl", AodGuid, out aodAttrs, out aodError);
-                if (amd == null || aod == null)
-                    return Unavailable("UEFI read failed: AmdSetupRPL " + ErrorMeaning(amdError)
-                        + "; AodSetupRpl " + ErrorMeaning(aodError));
-                return FromBlobs(amd, aod);
+                var blobs = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+                foreach (var variable in candidate.Variables)
+                {
+                    uint attributes;
+                    int error;
+                    byte[] bytes = ReadVariable(variable.Name, variable.Guid, out attributes, out error);
+                    if (bytes == null)
+                        return Unavailable("UEFI read failed: " + variable.Name + ": " + ErrorMeaning(error));
+                    blobs.Add(variable.Name, bytes);
+                }
+                return ResolveCatalogCandidate(candidate, blobs);
             }
             catch (Exception ex)
             {
-                return Unavailable("UEFI read failed: " + ex.Message);
+                return Unavailable("UEFI origin catalog/read failed: " + ex.Message);
             }
         }
 
         public static SettingOriginReport FromDebugReport(string board, string biosVersion, string reportText)
         {
-            if (string.IsNullOrEmpty(board) || board.IndexOf("DRFXI", StringComparison.OrdinalIgnoreCase) < 0
-                || !Regex.IsMatch(biosVersion ?? "", @"(?:^|\D)1\.(15|17)(?:\D|$)"))
-                return Unavailable("Unsupported DRFXI board / BIOS in debug report.");
-            byte[] amd = DecodeReportBlob(reportText, "AmdSetupRPL");
-            byte[] aod = DecodeReportBlob(reportText, "AodSetupRpl");
-            if (amd == null || aod == null)
-                return Unavailable("This debug report does not contain both BIOS setup variable blobs.");
-            return FromBlobs(amd, aod);
+            try
+            {
+                var candidate = BiosOriginLayoutCatalog.Select(board, biosVersion);
+                if (candidate == null)
+                    return Unavailable("No supported origin layout for board / BIOS in debug report.");
+                if (candidate.Resolver != "drfxi-dragonrange-v1")
+                    return Unavailable("Origin layout has no trusted offline resolver: " + candidate.LayoutId);
+                var blobs = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+                foreach (var variable in candidate.Variables)
+                {
+                    byte[] bytes = DecodeReportBlob(reportText, variable.Name);
+                    if (bytes == null)
+                        return Unavailable("This debug report lacks BIOS setup variable " + variable.Name + ".");
+                    blobs.Add(variable.Name, bytes);
+                }
+                return ResolveCatalogCandidate(candidate, blobs);
+            }
+            catch (Exception ex)
+            {
+                return Unavailable("Offline origin layout catalog failed: " + ex.Message);
+            }
+        }
+
+        private static SettingOriginReport ResolveCatalogCandidate(
+            BiosOriginLayoutCatalog.BiosOriginCatalogMatch candidate,
+            IDictionary<string, byte[]> blobs)
+        {
+            string error = candidate.CheckFingerprint(blobs);
+            if (error != null)
+            {
+                var rejected = Unavailable("Layout catalog fingerprint mismatch: " + error);
+                rejected.LayoutId = candidate.LayoutId;
+                rejected.Plausibility = "failed: " + error;
+                return rejected;
+            }
+
+            // The catalog merely selects a candidate. The existing IFR-derived DRFXI
+            // resolver remains responsible for *every* field's plausibility validation.
+            SettingOriginReport resolved = FromBlobs(blobs["AmdSetupRPL"], blobs["AodSetupRpl"]);
+            if (resolved.IsMatched)
+                resolved.Status += "; catalog status=" + candidate.Status
+                    + ", layout=" + candidate.LayoutId;
+            return resolved;
         }
 
         private static byte[] DecodeReportBlob(string report, string name)

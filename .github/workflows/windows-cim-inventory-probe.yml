@@ -1,0 +1,28 @@
+name: Windows CIM inventory probe
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/windows-cim-inventory-probe.yml'
+permissions:
+  contents: read
+jobs:
+  powershell-cim:
+    runs-on: windows-2022
+    steps:
+      - name: Run friend's hardware inventory PowerShell
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $board = Get-CimInstance Win32_BaseBoard
+          $bios = Get-CimInstance Win32_BIOS
+          $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+          [pscustomobject]@{
+            Motherboard = $board.Product
+            SMBIOSBoardVersion = $board.Version
+            BIOS = $bios.SMBIOSBIOSVersion
+            BIOSDate = $bios.ReleaseDate
+            CPU = $cpu.Name
+          } | Format-List
+          Get-CimInstance Win32_PhysicalMemory |
+            Select-Object DeviceLocator,Manufacturer,PartNumber,Capacity,ConfiguredClockSpeed |
+            Format-Table -AutoSize

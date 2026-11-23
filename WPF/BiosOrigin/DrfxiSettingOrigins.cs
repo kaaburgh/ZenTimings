@@ -117,6 +117,7 @@ namespace ZenTimings.BiosOrigin
 
         internal byte[] AmdSetup { get; set; }
         internal byte[] AodSetup { get; set; }
+        internal byte[] Setup { get; set; }
         public string LayoutId { get; internal set; }
         public string Status { get; internal set; }
         public string Plausibility { get; internal set; }

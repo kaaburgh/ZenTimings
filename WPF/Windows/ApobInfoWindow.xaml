@@ -108,11 +108,20 @@
                     Header="Channel Timings"
                     Style="{StaticResource CollapsibleSectionStyle}" HeaderTemplate="{StaticResource CopyHeaderTemplate}"
                     Tag="{x:Reference TimingsGrid}">
-                    <DataGrid
-                        Name="TimingsGrid"
-                        Style="{StaticResource SectionDataGridStyle}"
-                        HeadersVisibility="Column"
-                        RowStyle="{StaticResource ApobRowStyle}" />
+                    <StackPanel>
+                        <CheckBox x:Name="ShowInactiveTimingsCheckBox"
+                                  Content="Show inactive timing blocks"
+                                  Margin="10,3,0,5"
+                                  Visibility="Collapsed"
+                                  ToolTip="Inactive APOB timing blocks are retained for diagnostics, but hidden by default."
+                                  Checked="ShowInactiveTimingsChanged"
+                                  Unchecked="ShowInactiveTimingsChanged" />
+                        <DataGrid
+                            Name="TimingsGrid"
+                            Style="{StaticResource SectionDataGridStyle}"
+                            HeadersVisibility="Column"
+                            RowStyle="{StaticResource ApobRowStyle}" />
+                    </StackPanel>
                 </GroupBox>
 
                 <GroupBox

@@ -67,6 +67,11 @@
         "present": true,
         "attributes": "0x83",
         "runtimeAttribute": true
+      },
+      "defaultHeaderProbe": {
+        "u32At0": "0x00000000",
+        "u32At4": "0x00000000",
+        "u32At8": "0x00000000"
       }
     },
     {
@@ -78,6 +83,11 @@
         "present": true,
         "attributes": "0x83",
         "runtimeAttribute": true
+      },
+      "defaultHeaderProbe": {
+        "u32At0": "0x00000000",
+        "u32At4": "0x00000000",
+        "u32At8": "0x00000000"
       }
     },
     {
@@ -961,5 +971,14 @@
     "AOD RPL and PHX varstores are 0x320 bytes and differ in offsets; no AOD default NVAR entries were found, so runtime presence and attributes need a live read.",
     "CPU-family selection between RPL and PHX paths is not fully decoded; MsiOcInfoFlag exposes QuestionId 0x2C8 at offset 0x01 and QuestionId 0x2C9 at offset 0x18.",
     "The BIOS image ID E7D75AMS.1E0 is used as the exact catalog version token; confirm the actual Windows SMBIOSBIOSVersion string on the target system."
+  ],
+  "unresolvedMsiOcIdentifiers": [
+    "MsiOcMemSpdData",
+    "MsiOcMemSpdXMPInfo",
+    "MsiOcUserXMPProfile",
+    "MsiOcMemSpdCheckSum",
+    "MsiOcMemPatchID",
+    "MsiOcMemPmicInfo",
+    "MsiOcMemECCInfo"
   ]
 }

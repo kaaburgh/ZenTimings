@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using ZenTimings.BiosOrigin;
+using ZenTimings.Common;
 
 internal static class Program
 {
@@ -206,6 +207,19 @@ internal static class Program
         Check(replay.IsMatched,
             "offline debug report reproduces origin data");
 
-        Console.WriteLine("OK: " + tests + " DRFXI setting-origin assertions");
+        // The DDR5 debug report previously dereferenced BMC.Table even though BMC was null.
+        Check(BiosMemoryControllerDebug.Dump(null, false).Single().StartsWith("Not applicable:"),
+            "DDR5 without BMC is not an error");
+        Check(BiosMemoryControllerDebug.Dump(new byte[] { 0x2A }, false).Single().StartsWith("Not applicable:"),
+            "unsupported memory type never emits a legacy APCB table");
+        Check(BiosMemoryControllerDebug.Dump(null, true).Single().StartsWith("Not available:"),
+            "DDR4 with missing table is reported without an exception");
+        Check(BiosMemoryControllerDebug.Dump(new byte[0], true).Single().StartsWith("Not available:"),
+            "DDR4 with empty table is reported without an exception");
+        Check(BiosMemoryControllerDebug.Dump(new byte[] { 0x00, 0x7F, 0xFF }, true)
+                .SequenceEqual(new[] { "Index 000: 00 (0)", "Index 001: 7F (127)", "Index 002: FF (255)" }),
+            "loaded DDR4 APCB bytes preserve the original dump format");
+
+        Console.WriteLine("OK: " + tests + " DRFXI setting-origin and BIOS debug assertions");
     }
 }

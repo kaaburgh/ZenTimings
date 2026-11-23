@@ -57,10 +57,24 @@ internal static class Program
         Check(catalog != null && catalog.LayoutId == "msi-mag-b650-tomahawk-7d75v1e"
             && catalog.Resolver == "msi-mag-b650-raphael-v1e" && catalog.Status == "derived",
             "MSI 7D75v1E selects its derived family-specific layout");
-        // The previous 1E5 beta has a two-byte smaller MSI Setup varstore.
-        // Keep it unsupported until it has its own version-specific fingerprint.
-        Check(BiosOriginLayoutCatalog.Select("MS-7D75", "1.E5") == null,
-            "older MSI 7D75v1E5 cannot reuse 1E0 Setup fingerprint");
+        // Two BIOS releases share every mapped timing offset but not the
+        // fingerprint of MSI Setup (0x7C2 vs 0x7C4).
+        var catalogE5 = BiosOriginLayoutCatalog.Select("MS-7D75", "1.E5");
+        Check(catalogE5 != null && catalogE5.LayoutId == catalog.LayoutId
+            && catalogE5.Resolver == catalog.Resolver && catalogE5.Status == "derived",
+            "MSI 1E5 is a distinct derived release of the same mapping");
+        Check(catalog.ExpectedSize("Setup") == 0x7C4
+            && catalogE5.ExpectedSize("Setup") == 0x7C2
+            && catalogE5.ExpectedSize("AmdSetupRPL") == 0x779
+            && catalogE5.ExpectedSize("AodSetupRpl") == 0x320,
+            "release-specific Setup size never changes shared AMD varstores");
+        Check(BiosOriginLayoutCatalog.Select("MS-7D75", "E7D75AMS.1E5").ReleaseVersion == "1.E5"
+            && BiosOriginLayoutCatalog.Select("MS-7D75", "7D75v1E5").ReleaseVersion == "1.E5"
+            && BiosOriginLayoutCatalog.Select("MS-7D75", "E7D75AMS.1E0").ReleaseVersion == "1.E0",
+            "SMBIOS and vendor-facing aliases resolve to their canonical releases");
+        Check(BiosOriginLayoutCatalog.Select("MS-7D75", "1.E50") == null
+            && BiosOriginLayoutCatalog.Select("MS-7D75", "1.E7") == null,
+            "unsupported BIOS versions fail closed rather than prefix-match");
         Check(catalog.Variables.Count == 3
             && catalog.Variables.Single(v => v.Name == "AmdSetupRPL").Optional == false
             && catalog.Variables.Single(v => v.Name == "AodSetupRpl").Optional
@@ -86,8 +100,17 @@ internal static class Program
         blobs["Setup"] = setup;
         Check(catalog.CheckFingerprint(blobs) == null,
             "MSI fingerprint accepts exact IFR varstore sizes");
+        byte[] setupE5 = new byte[0x7C2];
+        blobs["Setup"] = setupE5;
+        Check(catalogE5.CheckFingerprint(blobs) == null
+            && catalog.CheckFingerprint(blobs)?.Contains("size") == true,
+            "1E5 Setup accepted only by its own release fingerprint");
+        blobs["Setup"] = setup;
+        Check(catalog.CheckFingerprint(blobs) == null
+            && catalogE5.CheckFingerprint(blobs)?.Contains("size") == true,
+            "1E0 Setup accepted only by its own release fingerprint");
 
-        var report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        var report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup, catalog);
         Check(report.IsMatched && report.LayoutId == "msi-mag-b650-tomahawk-7d75v1e",
             "MSI default synthetic variables pass IFR plausibility");
         Check(report.Find("tCL").Source == "?" && report.Find("Speed").Source == "?",
@@ -97,16 +120,24 @@ internal static class Program
             "MSI unknown origins explain the independent vendor OC paths");
         Check(report.Setup != null && report.Setup.Length == 0x7C4,
             "MSI Setup varstore is retained for opt-in debug export");
+        var e5Report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setupE5, catalogE5);
+        Check(e5Report.IsMatched && e5Report.Setup.Length == 0x7C2
+            && e5Report.Status.Contains("1.E5")
+            && e5Report.Find("tCL").Source == "?",
+            "MSI 1E5 resolves the same timing offsets with its own Setup size");
+        Check(!MsiMagB650SettingOrigins.FromBlobs(amd, aod, setupE5, catalog).IsMatched
+            && !MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup, catalogE5).IsMatched,
+            "wrong release fingerprint is rejected by resolver itself");
 
         amd[0x116] = 1;
         Set16(amd, 0x117, 6000);
-        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup, catalog);
         Check(report.Find("Speed").Source == "CBS"
             && report.Find("Speed").StoredNumber == 6000
             && report.Find("MCLK").DiffersFrom("3000.00", 3000) == false,
             "MSI CBS target speed and derived MCLK are decoded");
         aod[0x3C] = 1;
-        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup, catalog);
         Check(report.Find("Speed").Source == "?"
             && report.Find("Speed").Details.Contains("not interpreted"),
             "MSI AOD Speed path remains unknown until selector semantics are verified");
@@ -115,7 +146,7 @@ internal static class Program
         amd[0x116] = 1;
         amd[0x119] = 1;
         Set16(amd, 0x11A, 30);
-        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup, catalog);
         Check(report.Find("tCL").Source == "CBS" && report.Find("tCL").StoredNumber == 30,
             "MSI CBS tCL IFR offsets and value are decoded");
 
@@ -123,12 +154,12 @@ internal static class Program
         aod[0x3C] = 1;
         aod[0x3F] = 1;
         Set16(aod, 0x40, 30);
-        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup, catalog);
         Check(report.Find("tCL").Source == "AOD" && report.Find("tCL").StoredNumber == 30,
             "MSI AOD tCL IFR offsets and value are decoded");
 
         amd[0x119] = 1;
-        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup, catalog);
         Check(report.Find("tCL").Source == "?",
             "MSI does not invent AOD-over-CBS precedence when both menus are Manual");
 
@@ -137,41 +168,41 @@ internal static class Program
         aod[0x3C] = 255;
         aod[0x3F] = 0;
         setup[0x596] = 1;
-        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup, catalog);
         Check(report.Find("tCL").Source == "?"
             && report.Find("tCL").Details.Contains("EXPO")
             && report.Find("tCL").Details.Contains("0x596=1"),
             "MSI EXPO selector is disclosed as raw diagnostic, not falsely mapped to timing source");
         setup[0x596] = 0;
         setup[0x74] = 1;
-        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup, catalog);
         Check(report.Find("tCL").Source == "?"
             && report.Find("tCL").Details.Contains("0x74=1"),
             "top-level AMD EXPO selector is not omitted from MSI diagnostics");
         setup[0x74] = 0;
         Set16(setup, 0x597, 1);
-        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup, catalog);
         Check(report.Find("tCL").Source == "?"
             && report.Find("tCL").Details.Contains("0x597=1"),
             "Memory Try It tuning source is diagnosed rather than classified as Auto");
         Set16(setup, 0x597, 0);
 
-        report = MsiMagB650SettingOrigins.FromBlobs(amd, null, null);
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, null, null, catalog);
         Check(report.IsMatched && report.Find("tCL").Source == "?"
             && report.Find("tCL").Details.Contains("not runtime-readable"),
             "missing optional MSI AOD/Setup variables fail closed for Auto classification");
 
-        Check(!MsiMagB650SettingOrigins.FromBlobs(new byte[20], null, null).IsMatched,
+        Check(!MsiMagB650SettingOrigins.FromBlobs(new byte[20], null, null, catalog).IsMatched,
             "MSI resolver rejects incorrect CBS varstore size");
-        Check(!MsiMagB650SettingOrigins.FromBlobs(amd, aod, new byte[0x7C2]).IsMatched,
-            "MSI 1E5 Setup varstore cannot be silently misidentified as 1E0");
+        Check(!MsiMagB650SettingOrigins.FromBlobs(amd, aod, new byte[0x7C2], catalog).IsMatched,
+            "1E5-sized Setup cannot be misidentified as 1E0");
         byte[] badGate = (byte[])amd.Clone();
         badGate[0x116] = 254;
-        Check(!MsiMagB650SettingOrigins.FromBlobs(badGate, null, null).IsMatched,
+        Check(!MsiMagB650SettingOrigins.FromBlobs(badGate, null, null, catalog).IsMatched,
             "MSI resolver rejects an undefined CBS timing gate");
         byte[] badSetup = new byte[0x7C4];
         badSetup[0x596] = 4;
-        var badSetupReport = MsiMagB650SettingOrigins.FromBlobs(amd, null, badSetup);
+        var badSetupReport = MsiMagB650SettingOrigins.FromBlobs(amd, null, badSetup, catalog);
         Check(!badSetupReport.IsMatched && badSetupReport.Setup.Length == 0x7C4,
             "MSI resolver rejects invalid EXPO selector but retains raw blob for opt-in diagnostics");
 
@@ -181,6 +212,16 @@ internal static class Program
         Check(replay.IsMatched && replay.LayoutId == "msi-mag-b650-tomahawk-7d75v1e"
             && replay.Find("Speed").Source == "?",
             "MSI offline replay tolerates absent optional variables but remains fail-closed");
+        string e5Debug = debug + "Setup.base64: " + Convert.ToBase64String(setupE5) + "\n";
+        var e5Replay = DrfxiSettingOrigins.FromDebugReport(
+            "MS-7D75", "E7D75AMS.1E5", e5Debug);
+        var wrongReplay = DrfxiSettingOrigins.FromDebugReport(
+            "MS-7D75", "E7D75AMS.1E0", e5Debug);
+        Check(e5Replay.IsMatched && e5Replay.Status.Contains("1.E5")
+            && e5Replay.Find("tCL").Source == "?",
+            "MSI 1E5 replay uses selected fingerprint with the shared IFR mapping");
+        Check(!wrongReplay.IsMatched && wrongReplay.Plausibility.StartsWith("failed:"),
+            "MSI 1E5 Setup replayed under 1E0 must fail fingerprint validation");
     }
 
     private static void Main()

@@ -66,7 +66,7 @@ The Raphael timing offsets happen to overlap the first part of the DRFXI CBS map
 
 ## AMD AOD maps
 
-AodDxe declares both AOD formsets, each with a `0x320)-byte varstore. The offsets differ between RPL and PHX:
+AodDxe declares both AOD formsets, each with a `0x320`-byte varstore. The offsets differ between RPL and PHX:
 
 | Field | AOD RPL | AOD PHX |
 |---|---:|---:|

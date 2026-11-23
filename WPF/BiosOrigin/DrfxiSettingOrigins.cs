@@ -351,6 +351,10 @@ namespace ZenTimings.BiosOrigin
                 var rejected = Unavailable("Layout catalog fingerprint mismatch: " + error);
                 rejected.LayoutId = candidate.LayoutId;
                 rejected.Plausibility = "failed: " + error;
+                byte[] diagnosticBlob;
+                if (blobs.TryGetValue("AmdSetupRPL", out diagnosticBlob)) rejected.AmdSetup = diagnosticBlob;
+                if (blobs.TryGetValue("AodSetupRpl", out diagnosticBlob)) rejected.AodSetup = diagnosticBlob;
+                if (blobs.TryGetValue("Setup", out diagnosticBlob)) rejected.Setup = diagnosticBlob;
                 return rejected;
             }
 

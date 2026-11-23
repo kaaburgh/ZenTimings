@@ -347,8 +347,18 @@ namespace ZenTimings.BiosOrigin
             // resolver remains responsible for *every* field's plausibility validation.
             SettingOriginReport resolved = FromBlobs(blobs["AmdSetupRPL"], blobs["AodSetupRpl"]);
             if (resolved.IsMatched)
+            {
                 resolved.Status += "; catalog status=" + candidate.Status
                     + ", layout=" + candidate.LayoutId;
+                string evidence = candidate.Status == "verified"
+                    ? "Verified against a real firmware-variable readout."
+                    : candidate.Status == "derived"
+                        ? "Derived from firmware metadata; no hardware readout verified this BIOS release."
+                        : "Proposed mapping, not yet verified on hardware.";
+                foreach (SettingOriginRow row in resolved.Rows.Values)
+                    row.Details = (row.Details ?? "") + "\nLayout catalog: " +
+                        candidate.LayoutId + " (" + candidate.Status + "). " + evidence;
+            }
             return resolved;
         }
 

@@ -73,7 +73,7 @@ This first resolver maps the timing controls and CBS Memory Target Speed only. F
 
 ## Hardware validation still required
 
-On a real MS-7D75 board running this BIOS:
+On a real MS-7D75 board running this BIOS, run ZenTimings as Administrator so the read-only UEFI API can enable `SeSystemEnvironmentPrivilege`:
 
 1. Confirm the exact `Win32_BaseBoard.Product` and `Win32_BIOS.SMBIOSBIOSVersion` strings used by catalog selection.
 2. Confirm whether Windows can read `AmdSetupRPL`, `AodSetupRpl`, and `Setup`, and confirm the three lengths.

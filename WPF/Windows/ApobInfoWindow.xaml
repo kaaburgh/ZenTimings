@@ -141,11 +141,20 @@
                     Header="ODT &amp; Drive Strength per Timing Block"
                     Style="{StaticResource CollapsibleSectionStyle}" HeaderTemplate="{StaticResource CopyHeaderTemplate}"
                     Tag="{x:Reference TrainingOdtGrid}">
-                    <DataGrid
-                        Name="TrainingOdtGrid"
-                        Style="{StaticResource SectionDataGridStyle}"
-                        HeadersVisibility="Column"
-                        RowStyle="{StaticResource ApobRowStyle}" />
+                    <StackPanel>
+                        <CheckBox x:Name="ShowInactiveTrainingOdtCheckBox"
+                                  Content="Show inactive ODT timing blocks"
+                                  Margin="10,3,0,5"
+                                  Visibility="Collapsed"
+                                  ToolTip="Include inactive APOB blocks in this diagnostic ODT table."
+                                  Checked="ShowInactiveTrainingOdtChanged"
+                                  Unchecked="ShowInactiveTrainingOdtChanged" />
+                        <DataGrid
+                            Name="TrainingOdtGrid"
+                            Style="{StaticResource SectionDataGridStyle}"
+                            HeadersVisibility="Column"
+                            RowStyle="{StaticResource ApobRowStyle}" />
+                    </StackPanel>
                 </GroupBox>
 
                 <GroupBox

@@ -397,10 +397,12 @@ namespace ZenTimings.BiosOrigin
                     report.Add(entry);
                 }
 
-                // Memory target speed is controlled by a hidden AOD 0x3A guard as well as 0x3C.
-                bool aodSpeed = aodGate && aod[0x3A] == 1;
+                // AodSmm writes Memory Target Speed only when the timing gate is enabled
+                // and the hidden 0x3A selector is NOT 1 (the firmware default is 0xFF).
+                // When 0x3A == 1, firmware takes a separate, not-yet-decoded profile path.
+                bool aodSpeed = aodGate && aod[0x3A] != 1;
                 report.Add(Choose("Speed", "speed", aodSpeed, cbsGate, U16(aod, 0x3D),
-                    U16(amd, 0x117), aodGate && aod[0x3A] == 1, cbsGate));
+                    U16(amd, 0x117), aodSpeed, cbsGate));
 
                 foreach (VoltageField v in layout.Voltages)
                 {
@@ -524,7 +526,7 @@ namespace ZenTimings.BiosOrigin
                     && !ValidStep(U16(aod, field.Value), field.Min, field.Max, 0))
                     return field.Row + " AOD voltage outside IFR range";
 
-            if (aod[0x3C] == 1 && aod[0x3A] == 1
+            if (aod[0x3C] == 1 && aod[0x3A] != 1
                 && !ValidStep(U16(aod, 0x3D), 2000, 12000, 200))
                 return "AOD speed outside IFR range";
             if (amd[0x116] == 1 && !ValidStep(U16(amd, 0x117), 2000, 11200, 0))

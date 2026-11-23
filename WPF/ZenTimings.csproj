@@ -547,6 +547,9 @@
     <EmbeddedResource Include="Resources\BiosLayouts\drfxi-dragonrange-v1.json">
       <LogicalName>ZenTimings.Resources.BiosLayouts.drfxi-dragonrange-v1.json</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\BiosLayouts\msi-mag-b650-tomahawk-wifi-7d75v1e.json">
+      <LogicalName>ZenTimings.Resources.BiosLayouts.msi-mag-b650-tomahawk-wifi-7d75v1e.json</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ZenStates-Core\ZenStates-Core.csproj">

@@ -80,6 +80,10 @@ internal static class Program
             "unsupported board never chooses a layout");
         Check(catalog115.Resolver == "drfxi-dragonrange-v1"
             && catalog115.Variables.Count == 2, "catalog specifies trusted resolver and varstores");
+        Check(catalog115.Variables.All(v => v.Guid.StartsWith("{") && v.Guid.EndsWith("}"))
+            && catalog115.Variables.Any(v => v.Guid.Equals(
+                "{3a997502-647a-4c82-998e-52ef9486a247}", StringComparison.OrdinalIgnoreCase)),
+            "catalog GUIDs are canonical Win32 UEFI API strings with braces");
         Check(BiosOriginLayoutCatalog.MayDisplayOrigins("verified")
             && BiosOriginLayoutCatalog.MayDisplayOrigins("derived"),
             "only deterministic catalog evidence tiers are eligible for display");

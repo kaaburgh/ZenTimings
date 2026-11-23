@@ -280,7 +280,7 @@ namespace ZenTimings.BiosOrigin
                     return Unavailable("No supported origin layout catalog entry for this board / BIOS.");
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
                     return Unavailable("AI-proposed origin layouts require maintainer verification before display.");
-                if (candidate.Resolver != "drfxi-dragonrange-v1")
+                if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e")
                     return Unavailable("Origin layout has no trusted resolver: " + candidate.LayoutId);
                 if (Environment.OSVersion.Platform != PlatformID.Win32NT)
                     return Unavailable("Windows UEFI API is not available on this OS.");
@@ -296,7 +296,10 @@ namespace ZenTimings.BiosOrigin
                     int error;
                     byte[] bytes = ReadVariable(variable.Name, variable.Guid, out attributes, out error);
                     if (bytes == null)
+                    {
+                        if (variable.Optional) continue;
                         return Unavailable("UEFI read failed: " + variable.Name + ": " + ErrorMeaning(error));
+                    }
                     blobs.Add(variable.Name, bytes);
                 }
                 return ResolveCatalogCandidate(candidate, blobs);
@@ -316,14 +319,17 @@ namespace ZenTimings.BiosOrigin
                     return Unavailable("No supported origin layout for board / BIOS in debug report.");
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
                     return Unavailable("AI-proposed origin layouts are not trusted for offline display.");
-                if (candidate.Resolver != "drfxi-dragonrange-v1")
+                if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e")
                     return Unavailable("Origin layout has no trusted offline resolver: " + candidate.LayoutId);
                 var blobs = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
                 foreach (var variable in candidate.Variables)
                 {
                     byte[] bytes = DecodeReportBlob(reportText, variable.Name);
                     if (bytes == null)
+                    {
+                        if (variable.Optional) continue;
                         return Unavailable("This debug report lacks BIOS setup variable " + variable.Name + ".");
+                    }
                     blobs.Add(variable.Name, bytes);
                 }
                 return ResolveCatalogCandidate(candidate, blobs);
@@ -347,9 +353,24 @@ namespace ZenTimings.BiosOrigin
                 return rejected;
             }
 
-            // The catalog merely selects a candidate. The existing IFR-derived DRFXI
-            // resolver remains responsible for *every* field's plausibility validation.
-            SettingOriginReport resolved = FromBlobs(blobs["AmdSetupRPL"], blobs["AodSetupRpl"]);
+            // The catalog selects a family-specific IFR-derived resolver. Each resolver
+            // validates its own fields against the exact BIOS layout before showing badges.
+            SettingOriginReport resolved;
+            if (candidate.Resolver == "drfxi-dragonrange-v1")
+            {
+                resolved = FromBlobs(blobs["AmdSetupRPL"], blobs["AodSetupRpl"]);
+            }
+            else if (candidate.Resolver == "msi-mag-b650-raphael-v1e")
+            {
+                byte[] aod, setup;
+                blobs.TryGetValue("AodSetupRpl", out aod);
+                blobs.TryGetValue("Setup", out setup);
+                resolved = MsiMagB650SettingOrigins.FromBlobs(blobs["AmdSetupRPL"], aod, setup);
+            }
+            else
+            {
+                return Unavailable("Origin layout has no trusted resolver: " + candidate.Resolver);
+            }
             if (resolved.IsMatched)
             {
                 resolved.Status += "; catalog status=" + candidate.Status

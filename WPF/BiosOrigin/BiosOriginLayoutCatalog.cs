@@ -178,7 +178,9 @@ namespace ZenTimings.BiosOrigin
             internal BiosOriginCatalogVariable(string name, string guid)
             {
                 Name = name;
-                Guid = guid;
+                // Win32 GetFirmwareEnvironmentVariableExW requires a GUID string
+                // with braces, even though the catalog stores canonical UUIDs.
+                Guid = "{" + System.Guid.Parse(guid).ToString("D") + "}";
             }
             public string Name { get; }
             public string Guid { get; }

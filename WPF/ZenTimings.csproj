@@ -576,6 +576,20 @@
       <FileWrites Include="$(BuildNumberFile)" />
     </ItemGroup>
   </Target>
+  <!-- Custom builds: msbuild /p:ZenTimingsUpdateCheck=disabled (or the environment variable of the same name)
+       embeds an assembly marker that turns the built-in update check off. Builds without the property,
+       including the official releases, are unchanged. -->
+  <Target Name="EmbedUpdateCheckMarker" BeforeTargets="PrepareForBuild" Condition="'$(ZenTimingsUpdateCheck)' == 'disabled'">
+    <PropertyGroup>
+      <UpdateCheckMarkerFile>$(IntermediateOutputPath)UpdateCheckMarker.g.cs</UpdateCheckMarkerFile>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(UpdateCheckMarkerFile)" Overwrite="true" WriteOnlyWhenDifferent="true" Lines="// Generated for a custom build without the built-in update check.;[assembly: System.Reflection.AssemblyMetadata(&quot;ZenTimings.UpdateCheck&quot;, &quot;disabled&quot;)]" />
+    <ItemGroup>
+      <Compile Include="$(UpdateCheckMarkerFile)" />
+      <FileWrites Include="$(UpdateCheckMarkerFile)" />
+    </ItemGroup>
+  </Target>
   <Target Name="DownloadPawnIOSetup" BeforeTargets="PrepareForBuild" Condition="!Exists('Resources\PawnIO\PawnIO_setup.exe')">
     <MakeDir Directories="Resources\PawnIO" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/namazso/PawnIO.Setup/releases/download/$(PawnIOVersion)/PawnIO_setup.exe' -OutFile 'Resources\PawnIO\PawnIO_setup.exe'&quot;" />

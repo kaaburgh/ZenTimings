@@ -13,6 +13,9 @@ on:
       - 'WPF/ViewModels/MainViewModel.cs'
       - 'WPF/Settings/AppSettings.cs'
       - 'WPF/Windows/DebugDialog.*'
+      - 'WPF/Updater.cs'
+      - 'WPF/Windows/AboutDialog.*'
+      - 'WPF/Windows/OptionsDialog.*'
       - 'WPF/ZenTimings.csproj'
       - 'tests/DrfxiOriginSmoke/**'
       - '.github/workflows/bd790i-origin.yml'
@@ -46,7 +49,9 @@ jobs:
       - name: Build full WPF application
         if: always()
         shell: pwsh
-        run: msbuild WPF/ZenTimings.sln /restore /p:Configuration=Release '/p:Platform=Any CPU' /verbosity:minimal
+        # Development artifact: the built-in update check is compiled out (ZenTimingsUpdateCheck=disabled),
+        # so this build never offers the official release. Builds without the property are unchanged.
+        run: msbuild WPF/ZenTimings.sln /restore /p:Configuration=Release '/p:Platform=Any CPU' /p:ZenTimingsUpdateCheck=disabled /verbosity:minimal
 
       - name: Stage portable Windows build
         if: success()
@@ -92,6 +97,11 @@ jobs:
           if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
             throw 'Portable package does not contain ZenTimings.exe'
           }
+          # The update-check marker is an AssemblyMetadata attribute; its strings are stored as UTF-8 in the blob heap.
+          $exeText = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($binary))
+          if (-not $exeText.Contains('ZenTimings.UpdateCheck')) {
+            throw 'Development artifact must be built with /p:ZenTimingsUpdateCheck=disabled'
+          }
           if (-not (Test-Path -LiteralPath (Join-Path $stage 'ZenStates-Core.dll') -PathType Leaf) -or
               -not (Test-Path -LiteralPath (Join-Path $stage 'inpoutx64.dll') -PathType Leaf)) {
             throw 'Portable package is missing the managed or native I/O dependency'
@@ -103,6 +113,7 @@ jobs:
             "Git commit: $sourceCommit"
             'Configuration: Release, Any CPU, .NET Framework 4.7.2'
             'Not signed. Origin column tested on one BD790i X3D (BIOS 1.15); updated Speed/MCLK and BMC fixes need verification. Does not write UEFI variables.'
+            'Built-in update check: disabled (custom build; never offers the official release).'
             'IMPORTANT: Includes the legacy InpOut native library for AOD/APOB reads.'
             'The native library may load a legacy kernel driver, which Windows 11 security can block.'
             'Do not disable Memory Integrity or Microsoft vulnerable driver protections to run it.'

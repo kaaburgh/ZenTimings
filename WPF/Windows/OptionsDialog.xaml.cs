@@ -52,6 +52,12 @@ namespace ZenTimings.Windows
             checkBoxAdvancedMode.IsChecked = settings.AdvancedMode;
             checkBoxCheckUpdate.IsChecked = settings.CheckForUpdates;
             comboBoxReleaseChannel.SelectedIndex = (int)settings.UpdateReleaseChannel;
+            if (!Updater.IsAvailable)
+            {
+                checkBoxCheckUpdate.IsEnabled = false;
+                comboBoxReleaseChannel.IsEnabled = false;
+                checkBoxCheckUpdate.ToolTip = "Update check is disabled in this custom build.";
+            }
             checkBoxSavePosition.IsChecked = settings.SaveWindowPosition;
             checkBoxWindowSnapping.IsChecked = settings.EnableWindowSnapping;
             checkBoxMinimizeToTray.IsChecked = settings.MinimizeToTray;

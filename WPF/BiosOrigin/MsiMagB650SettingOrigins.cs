@@ -40,8 +40,11 @@ namespace ZenTimings.BiosOrigin
                 bool cbsGate = amd[layout.Gates.CbsActive] == 1;
                 bool axmpSelected = setupAvailable && layout.SetupProfiles.AxmpOffsets.Any(o => setup[o] != 0);
                 bool expoSelected = setupAvailable && layout.SetupProfiles.ExpoOffsets.Any(o => setup[o] != 0);
-                bool profileSelected = axmpSelected || expoSelected;
-                string profileDetails = BuildProfileDetails(layout, setup, axmpSelected, expoSelected);
+                bool memoryTryItSelected = setupAvailable && layout.SetupProfiles.MemoryTryItOffsets
+                    .Any(o => U16(setup, o) != 0);
+                bool profileSelected = axmpSelected || expoSelected || memoryTryItSelected;
+                string profileDetails = BuildProfileDetails(layout, setup, axmpSelected, expoSelected,
+                    memoryTryItSelected);
 
                 var report = new SettingOriginReport
                 {
@@ -83,7 +86,10 @@ namespace ZenTimings.BiosOrigin
                 }
                 else
                 {
-                    speed = Automatic("Speed", "Neither AMD CBS nor the readable MSI/AOD state selects a manual speed.");
+                    speed = Unknown("Speed",
+                        "AMD CBS/AOD speed gates are Auto, but MSI exposes its own DRAM Frequency "
+                        + "at Setup[0x51B]/Setup[0x68C]. Those conditional paths are not yet mapped.",
+                        profileDetails);
                 }
                 report.Add(speed);
                 report.Add(new SettingOriginRow
@@ -142,8 +148,9 @@ namespace ZenTimings.BiosOrigin
             if (profileSelected)
                 return Unknown(row, "No manual AMD CBS/AOD override was found, but an MSI A-XMP / EXPO selector is non-zero. "
                     + "The profile's per-timing application path is not mapped.", profileDetails);
-            return Automatic(row, "No Manual control was found in the readable AMD CBS/AOD variables; "
-                + "the MSI A-XMP / EXPO selectors are disabled.");
+            return Unknown(row, "No AMD CBS/AOD Manual control was found, but independent MSI "
+                + "DRAM Timing / High-Efficiency Mode / user-profile paths are not fully mapped. "
+                + "Auto cannot yet be established for this board.", profileDetails);
         }
 
         private static SettingOriginRow Stored(string row, string kind, string source, int value, string details)
@@ -159,13 +166,11 @@ namespace ZenTimings.BiosOrigin
             };
         }
 
-        private static SettingOriginRow Automatic(string row, string details) =>
-            new SettingOriginRow { Row = row, Source = "Auto", Details = "Auto: " + details };
-
         private static SettingOriginRow Unknown(string row, string details, string profileDetails) =>
             new SettingOriginRow { Row = row, Source = "?", Details = details + " " + profileDetails };
 
-        private static string BuildProfileDetails(Layout layout, byte[] setup, bool axmpSelected, bool expoSelected)
+        private static string BuildProfileDetails(Layout layout, byte[] setup,
+            bool axmpSelected, bool expoSelected, bool memoryTryItSelected)
         {
             if (setup == null)
                 return "MSI Setup variable was not readable; A-XMP/EXPO selection is unknown.";
@@ -173,10 +178,13 @@ namespace ZenTimings.BiosOrigin
                 "0x" + o.ToString("X") + "=" + setup[o].ToString(CultureInfo.InvariantCulture)));
             string expo = string.Join(", ", layout.SetupProfiles.ExpoOffsets.Select(o =>
                 "0x" + o.ToString("X") + "=" + setup[o].ToString(CultureInfo.InvariantCulture)));
-            return "MSI Setup profile selectors (raw): A-XMP [" + axmp + "]; EXPO [" + expo + "]. "
-                + (expoSelected || axmpSelected
+            string tryIt = string.Join(", ", layout.SetupProfiles.MemoryTryItOffsets.Select(o =>
+                "0x" + o.ToString("X") + "=" + U16(setup, o).ToString(CultureInfo.InvariantCulture)));
+            return "MSI Setup profile selectors (raw): A-XMP [" + axmp + "]; EXPO [" + expo
+                + "]; Memory Try It [" + tryIt + "]. "
+                + (expoSelected || axmpSelected || memoryTryItSelected
                     ? "At least one selector is non-zero; the active conditional group and effective application are not established."
-                    : "All exposed A-XMP/EXPO selectors are zero.");
+                    : "Those selectors are zero, but other MSI OC/DRAM Timing controls remain unmapped.");
         }
 
         private static string CheckPlausibility(Layout layout, byte[] amd, byte[] aod, byte[] setup)
@@ -226,6 +234,9 @@ namespace ZenTimings.BiosOrigin
                     if (setup[offset] > 5) return "MSI A-XMP selector outside IFR options";
                 foreach (int offset in layout.SetupProfiles.ExpoOffsets)
                     if (setup[offset] > 3) return "MSI EXPO selector outside IFR options";
+                foreach (int offset in layout.SetupProfiles.MemoryTryItOffsets)
+                    if (U16(setup, offset) > 0x314)
+                        return "MSI Memory Try It value outside IFR range";
             }
             return null;
         }
@@ -298,6 +309,7 @@ namespace ZenTimings.BiosOrigin
         {
             [DataMember(Name = "aXmpOffsets")] public List<int> AxmpOffsets;
             [DataMember(Name = "expoOffsets")] public List<int> ExpoOffsets;
+            [DataMember(Name = "memoryTryItOffsets")] public List<int> MemoryTryItOffsets;
         }
 
         [DataContract]

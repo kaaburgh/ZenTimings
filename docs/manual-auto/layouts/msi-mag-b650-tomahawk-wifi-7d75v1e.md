@@ -30,9 +30,9 @@ The `0x83` attributes prove that the *image's default NVAR entries* are runtime 
 
 ## MSI OC Setup fields
 
-MSI's own `Setup` variable contains profile selection and direct memory-clock controls. The IFR defines two CPU/platform paths:
+MSI's own `Setup` variable contains profile selection and direct memory-clock controls. The IFR defines two CPU/platform paths. The first is labelled RPL here because its surrounding AMD CBS family is RPL; the MSI selector's exact CPU-family mapping is not yet proven:
 
-| Setting | Raphael path | Alternate path |
+| Setting | RPL candidate path (selector 0x2C8 = 2) | Alternate path (selector 0x2C8 in 3,4) |
 |---|---:|---:|
 | A-XMP selector | `0x595` | `0x6F9` |
 | EXPO selector | `0x596` | `0x6FA` |
@@ -42,7 +42,7 @@ MSI's own `Setup` variable contains profile selection and direct memory-clock co
 | Memory Context Restore | `0x594` | `0x6F8` |
 | Memory Try It! | `0x597` | `0x6FB` |
 
-The RPL-path EXPO values are Disabled=0, Profile 1=1, Profile 2=2, User Profile 1=3. A-XMP has Disabled=0, Profiles 1–3=1–3, and User Profiles 1–2=4–5. DRAM/FCLK value `0xFFFF` means Auto; UCLK `0xFF` means Auto, 1 means UCLK=MEMCLK, and 0 means UCLK=MEMCLK/2.
+The RPL-candidate-path EXPO values are Disabled=0, Profile 1=1, Profile 2=2, User Profile 1=3. A-XMP has Disabled=0, Profiles 1–3=1–3, and User Profiles 1–2=4–5. DRAM/FCLK value `0xFFFF` means Auto; UCLK `0xFF` means Auto, 1 means UCLK=MEMCLK, and 0 means UCLK=MEMCLK/2.
 
 The IFR references `MsiOcInfoFlag` QuestionId `0x2C8` at offset `0x01` and QuestionId `0x2C9` at offset `0x18` to gate these paths. The exact CPU-family meaning of the selector values is not yet established. Older A-XMP/EXPO fields at `Setup+0x73/0x74` are inside an unconditional `SuppressIf True` and are not treated as active settings.
 

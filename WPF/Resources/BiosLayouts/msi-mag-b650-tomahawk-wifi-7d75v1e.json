@@ -750,7 +750,8 @@
           "1": "UCLK=MEMCLK",
           "255": "Auto"
         }
-      }
+      },
+      "unresolvedHiddenByteAt0x03A": "Not an IFR question in the RPL formset; do not reuse DRFXI AodSmm guard semantics without tracing this BIOS's AodSmm apply path."
     },
     "phoenix": {
       "variable": "AodSetupPhx",

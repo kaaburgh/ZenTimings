@@ -1,11 +1,6 @@
 {
   "id": "msi-mag-b650-tomahawk-7d75v1e",
-  "source": "MSI MAG B650 TOMAHAWK WIFI (MS-7D75), BIOS V1.E / E7D75AMS.1E0, release notes dated 2024-02-21. Extracted from the supplied BIOS image; IFR-derived, no hardware variable readout yet.",
-  "fingerprint": {
-    "amdSize": 1913,
-    "aodSize": 800,
-    "setupSize": 1988
-  },
+  "source": "MSI MAG B650 TOMAHAWK WIFI (MS-7D75): shared IFR layout for BIOS E7D75AMS.1E5 (2024-01-25) and E7D75AMS.1E0 (2024-02-21). Offsets are identical for the mapped memory controls; version-specific varstore fingerprints live in catalog-v1.json. Both releases are derived, not hardware-verified.",
   "gates": {
     "aodActive": 60,
     "cbsActive": 278
@@ -378,7 +373,7 @@
     "MSI Setup declares A-XMP selectors at 0x595/0x6F9 and EXPO selectors at 0x596/0x6FA. The two conditional UI groups are not yet resolved to a single active selector; raw values are diagnostic only.",
     "The AOD speed selector at 0x3A is an unnamed numeric IFR field. Its MSI-specific write semantics are not established; AOD Speed is not inferred from it.",
     "The external StdDefaults NVRAM block contains AmdSetupRPL but no AodSetupRpl default entry. AOD IFR declares AodSetupRpl with size 0x320; runtime visibility must be checked on hardware.",
-    "Comparison with 7D75v1E5 (2024-01-25) confirms that AMD CBS/AOD IFR matches exactly. MSI Setup increased from 0x7C2 to 0x7C4 in 1E0; EXPO/A-XMP and Memory Try It offsets stay the same.",
+    "Comparison of 7D75v1E5 and 7D75v1E0 confirmed identical AMD CBS/AOD IFR and stable MSI memory/EXPO offsets; per-release Setup sizes (0x7C2 vs 0x7C4) are stored only in the catalog.",
     "MSI's own Setup has an independent DRAM Frequency menu at 0x51B/0x68C, High-Efficiency Mode and Memory Try It; this first resolver must not label timings/Speed as Auto merely because CBS/AOD gate bytes are Auto."
   ]
 }

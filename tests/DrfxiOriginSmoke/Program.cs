@@ -57,6 +57,10 @@ internal static class Program
         Check(catalog != null && catalog.LayoutId == "msi-mag-b650-tomahawk-7d75v1e"
             && catalog.Resolver == "msi-mag-b650-raphael-v1e" && catalog.Status == "derived",
             "MSI 7D75v1E selects its derived family-specific layout");
+        // The previous 1E5 beta has a two-byte smaller MSI Setup varstore.
+        // Keep it unsupported until it has its own version-specific fingerprint.
+        Check(BiosOriginLayoutCatalog.Select("MS-7D75", "1.E5") == null,
+            "older MSI 7D75v1E5 cannot reuse 1E0 Setup fingerprint");
         Check(catalog.Variables.Count == 3
             && catalog.Variables.Single(v => v.Name == "AmdSetupRPL").Optional == false
             && catalog.Variables.Single(v => v.Name == "AodSetupRpl").Optional
@@ -86,8 +90,11 @@ internal static class Program
         var report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
         Check(report.IsMatched && report.LayoutId == "msi-mag-b650-tomahawk-7d75v1e",
             "MSI default synthetic variables pass IFR plausibility");
-        Check(report.Find("tCL").Source == "Auto" && report.Find("Speed").Source == "Auto",
-            "MSI default CBS/AOD/Setup selectors classify as Auto");
+        Check(report.Find("tCL").Source == "?" && report.Find("Speed").Source == "?",
+            "MSI defaults stay unknown until proprietary OC settings are mapped");
+        Check(report.Find("tCL").Details.Contains("MSI")
+            && report.Find("Speed").Details.Contains("0x51B"),
+            "MSI unknown origins explain the independent vendor OC paths");
         Check(report.Setup != null && report.Setup.Length == 0x7C4,
             "MSI Setup varstore is retained for opt-in debug export");
 
@@ -135,6 +142,19 @@ internal static class Program
             && report.Find("tCL").Details.Contains("EXPO")
             && report.Find("tCL").Details.Contains("0x596=1"),
             "MSI EXPO selector is disclosed as raw diagnostic, not falsely mapped to timing source");
+        setup[0x596] = 0;
+        setup[0x74] = 1;
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        Check(report.Find("tCL").Source == "?"
+            && report.Find("tCL").Details.Contains("0x74=1"),
+            "top-level AMD EXPO selector is not omitted from MSI diagnostics");
+        setup[0x74] = 0;
+        Set16(setup, 0x597, 1);
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        Check(report.Find("tCL").Source == "?"
+            && report.Find("tCL").Details.Contains("0x597=1"),
+            "Memory Try It tuning source is diagnosed rather than classified as Auto");
+        Set16(setup, 0x597, 0);
 
         report = MsiMagB650SettingOrigins.FromBlobs(amd, null, null);
         Check(report.IsMatched && report.Find("tCL").Source == "?"
@@ -143,6 +163,8 @@ internal static class Program
 
         Check(!MsiMagB650SettingOrigins.FromBlobs(new byte[20], null, null).IsMatched,
             "MSI resolver rejects incorrect CBS varstore size");
+        Check(!MsiMagB650SettingOrigins.FromBlobs(amd, aod, new byte[0x7C2]).IsMatched,
+            "MSI 1E5 Setup varstore cannot be silently misidentified as 1E0");
         byte[] badGate = (byte[])amd.Clone();
         badGate[0x116] = 254;
         Check(!MsiMagB650SettingOrigins.FromBlobs(badGate, null, null).IsMatched,

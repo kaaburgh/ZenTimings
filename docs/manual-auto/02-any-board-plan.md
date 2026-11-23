@@ -123,6 +123,9 @@ Gain: vendor OC menus that write standard tokens are covered without per-vendor 
 
 ## 7. Coverage tiers
 
+First non-DRFXI board experiment: [MSI MAG B650 TOMAHAWK WIFI (MS-7D75), BIOS 7D75v1E](msi-mag-b650-tomahawk-7d75v1e.md). The first resolver is deliberately `derived`: CBS timing offsets are IFR-mapped, while AOD runtime availability, MSI EXPO application, and AOD/CBS precedence still require a real hardware readout. Unknown is preferred over guessing.
+
+
 | Tier | Boards | Expected path | Effort per new BIOS family |
 |---|---|---|---|
 | A | stock AMD CBS/AOD menus (mini-PCs, many laptops, some boards) | deterministic derivation, DB entry | minutes automated + 1–2 h review |

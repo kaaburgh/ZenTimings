@@ -33,3 +33,72 @@ jobs:
       - name: Build complete WPF application
         shell: pwsh
         run: msbuild WPF/ZenTimings.sln /restore /p:Configuration=Release '/p:Platform=Any CPU' /verbosity:minimal
+      - name: Stage portable Windows build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = Join-Path $PWD 'WPF/bin/Release'
+          $exe = Join-Path $release 'ZenTimings.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            throw 'The Release build did not produce ZenTimings.exe'
+          }
+          $stage = Join-Path $PWD 'dist/ZenTimings-APOB-PR6-Windows'
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Get-ChildItem -LiteralPath $release -Force |
+            Where-Object { $_.Extension -notin @('.pdb', '.xml') } |
+            Copy-Item -Destination $stage -Recurse -Force
+
+          # The pinned ZenStates-Core submodule does not bundle its native InpOut
+          # binary. Retrieve only the DLL from the authenticated official release
+          # (no external EXE from that archive is executed).
+          $releaseZip = Join-Path $env:RUNNER_TEMP 'ZenTimings-v142.713-official.zip'
+          $nativeDir = Join-Path $env:RUNNER_TEMP 'zentimings-official-native'
+          $officialUrl = 'https://github.com/irusanov/ZenTimings/releases/download/v142.713/ZenTimings_v142.713.zip'
+          $officialDigest = 'C49F5A4A66A2C438D8B2BDDFDE5338DF67AD8BED835A5F2E3AD421B21C4D76A0'
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri $officialUrl -OutFile $releaseZip -MaximumRetryCount 3 -RetryIntervalSec 5
+          $actualDigest = (Get-FileHash -Algorithm SHA256 -LiteralPath $releaseZip).Hash
+          if ($actualDigest -ne $officialDigest) {
+            throw "Official ZenTimings archive SHA-256 mismatch: $actualDigest"
+          }
+          Expand-Archive -LiteralPath $releaseZip -DestinationPath $nativeDir -Force
+          $nativeCandidates = @(Get-ChildItem -LiteralPath $nativeDir -Recurse -File -Filter 'inpoutx64.dll')
+          if ($nativeCandidates.Count -ne 1) {
+            throw "Expected exactly one inpoutx64.dll, found $($nativeCandidates.Count)"
+          }
+          $licenseSource = Join-Path $PWD 'ZenStates-Core/External/InpOut/license.txt'
+          if (-not (Test-Path -LiteralPath $licenseSource -PathType Leaf)) {
+            throw 'InpOut license missing from pinned ZenStates-Core'
+          }
+          Copy-Item -LiteralPath $nativeCandidates[0].FullName -Destination (Join-Path $stage 'inpoutx64.dll') -Force
+          Copy-Item -LiteralPath $licenseSource -Destination (Join-Path $stage 'InpOut.LICENSE.txt') -Force
+          if (-not (Test-Path -LiteralPath (Join-Path $stage 'ZenStates-Core.dll') -PathType Leaf)) {
+            throw 'Portable build is missing the ZenStates-Core.dll dependency'
+          }
+
+          $sourceCommit = (git rev-parse HEAD).Trim()
+          @(
+            'ZenTimings v142 — APOB inactive timing/ODT column fix — portable development build'
+            'PR: https://github.com/kaaburgh/ZenTimings/pull/6'
+            "Git commit: $sourceCommit"
+            'Configuration: Release, Any CPU, .NET Framework 4.7.2'
+            'Source: based on master, independent of BIOS origin PR #1/#2/#5.'
+            'Build is not signed and has not been tested on the physical BD790i after this fix.'
+            'This build retains the upstream automatic update checker; do not replace this test build with an official update when validating.'
+            'IMPORTANT: includes the legacy InpOut native DLL for low-level APOB reads.'
+            'Windows security may prevent legacy InpOut drivers from loading.'
+            'Do not disable Memory Integrity or Windows vulnerable-driver protection to run this program.'
+            "ZenTimings.exe SHA256: $((Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $stage 'ZenTimings.exe')).Hash)"
+            "inpoutx64.dll SHA256: $((Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $stage 'inpoutx64.dll')).Hash)"
+          ) | Set-Content -LiteralPath (Join-Path $stage 'BUILD-INFO.txt') -Encoding UTF8
+          Write-Host 'Staged portable Windows files:'
+          Get-ChildItem -LiteralPath $stage -Recurse -File |
+            Select-Object FullName, Length
+
+      - name: Upload downloadable Windows ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZenTimings-APOB-PR6-Windows
+          path: dist/ZenTimings-APOB-PR6-Windows/
+          if-no-files-found: error
+          retention-days: 14

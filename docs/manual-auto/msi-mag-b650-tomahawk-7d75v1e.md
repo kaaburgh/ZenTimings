@@ -2,6 +2,9 @@
 
 ## Evidence and firmware identity
 
+For a byte-level and IFR comparison against the preceding `7D75v1E5` build (2024-01-25), see [1E5 → 1E0 comparison](msi-mag-b650-7d75v1e5-comparison.md). AMD CBS/AOD IFR matches exactly, but MSI `Setup` size differs (`0x7C2` vs `0x7C4`), so the older release needs a separate fingerprint.
+
+
 Source supplied for this analysis: MSI BIOS archive `7D75v1E.zip`.
 
 - Archive SHA-256: `aa922ad65d6fc3b60e1007e34e6c058d1cda884301583d53a80a1ecad462091b`
@@ -47,12 +50,14 @@ AOD Memory Target Speed is at `AodSetupRpl[0x3D]`, but the adjacent selector `Ao
 
 ## MSI EXPO / A-XMP state
 
-The MSI `Setup` IFR exposes two conditional groups:
+The MSI `Setup` IFR exposes a top-level profile selector pair plus two conditional groups:
 
-- A-XMP selectors: `Setup[0x595]` and `Setup[0x6F9]`
-- EXPO selectors: `Setup[0x596]` and `Setup[0x6FA]`
+- Top-level A-XMP and AMD EXPO: `Setup[0x73]` and `Setup[0x74]`
+- Conditional A-XMP selectors: `Setup[0x595]` and `Setup[0x6F9]`
+- Conditional EXPO selectors: `Setup[0x596]` and `Setup[0x6FA]`
+- Memory Try It! profile selectors: `Setup[0x597]` and `Setup[0x6FB]` (16-bit)
 
-The IFR options are Disabled/Profile 1/Profile 2 (and User Profile 1 for EXPO). The two groups are shown under different conditional branches in the same Overclocking form. Their active-branch relationship has not yet been resolved. The implementation therefore captures and displays these raw values as diagnostics only; it does not claim that a non-zero selector proves the profile was applied or assign the EXPO profile as the source of each timing.
+The IFR options are Disabled/Profile 1/Profile 2 (and User Profile 1 for EXPO). These controls are found in the MSI Overclocking forms. Their active-branch and firmware-application relationships have not been established. The implementation captures the listed raw values as diagnostics only; a non-zero selector is not proof that the profile was applied. Additional independent MSI controls include DRAM Frequency (`0x51B`/`0x68C`), High-Efficiency Mode (`0x57D`/`0x6F2`) and Memory Timing Preset (`0x57E`/`0x6F3`). The resolver therefore **does not claim Auto** for an MSI timing or Speed solely because AMD CBS and AOD both appear Auto; unmatched rows display `?`.
 
 ## Resolver policy and evidence status
 
@@ -66,7 +71,8 @@ Fail-closed rules:
 - `AodSetupRpl`, if readable, must have exactly `0x320` bytes; `Setup`, if readable, must have exactly `0x7C4` bytes.
 - Missing AOD or Setup data is not treated as Auto.
 - If both AMD CBS and AOD expose a Manual timing, the resolver reports unknown. AOD-over-CBS precedence is not assumed for this MSI BIOS.
-- If MSI A-XMP/EXPO selectors are non-zero and no explicit AMD CBS/AOD Manual control is found, the timing source is reported as unknown. Raw selector values are included in the tooltip for hardware validation.
+- If MSI A-XMP/EXPO / Memory Try It! selectors are non-zero and no explicit AMD CBS/AOD Manual control is found, the timing source is reported as unknown. All raw selector values are included in the tooltip for hardware validation.
+- Even when those selectors are zero, the independent MSI OC/DRAM Timing paths are not yet fully mapped, so we do not infer Auto.
 - No firmware writes, BIOS flashing, flash reads, or network access are performed by the application.
 
 This first resolver maps the timing controls and CBS Memory Target Speed only. FCLK/UCLK, voltages, Power Down, drive strengths, and the effective MSI profile-application path remain unmapped; their rows intentionally receive no inferred origin badge.

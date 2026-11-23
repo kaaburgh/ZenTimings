@@ -55,15 +55,25 @@
       "releases": [
         {
           "version": "1.E0",
+          "aliases": [
+            "E7D75AMS.1E0",
+            "7D75v1E"
+          ],
           "status": "derived"
         },
         {
-          "version": "E7D75AMS.1E0",
-          "status": "derived"
-        },
-        {
-          "version": "7D75v1E",
-          "status": "derived"
+          "version": "1.E5",
+          "aliases": [
+            "E7D75AMS.1E5",
+            "7D75v1E5"
+          ],
+          "status": "derived",
+          "fingerprintOverrides": [
+            {
+              "name": "Setup",
+              "size": 1986
+            }
+          ]
         }
       ],
       "variables": [

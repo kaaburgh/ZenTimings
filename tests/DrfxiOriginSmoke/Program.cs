@@ -65,7 +65,7 @@ internal static class Program
         // Synthesized full 1.15 owner configuration, documented in the AFU /O readback.
         // Not a raw NVRAM fixture: those bytes were not committed to the research repository.
         aod[0x3C] = 1;
-        aod[0x3A] = 1;
+        aod[0x3A] = 0xFF; // AodSmm default; != 1 writes Memory Target Speed.
         Set16(aod, 0x3D, 6000);
         aod[0x3F] = 1;
         Set16(aod, 0x40, 36);
@@ -106,6 +106,31 @@ internal static class Program
         r = DrfxiSettingOrigins.FromBlobs(cbs, aod);
         Check(r.IsMatched, "owner-like AOD config matches: " + r.Status);
         Check(r.Find("Speed").Source == "AOD" && r.Find("Speed").StoredNumber == 6000, "AOD 6000 MT/s");
+        Check(r.Find("MCLK").Source == "AOD" && r.Find("MCLK").StoredNumber == 6000,
+            "MCLK inherits AOD speed origin, 6000 MT/s stored");
+        // AOD 0x3A selects two mutually exclusive firmware paths: default 0xFF
+        // writes the Memory Target Speed token; == 1 writes alternate profile tokens.
+        aod[0x3A] = 1;
+        var profilePath = DrfxiSettingOrigins.FromBlobs(cbs, aod);
+        Check(profilePath.IsMatched && profilePath.Find("Speed").Source == "Auto",
+            "0x3A == 1 suppresses AOD Memory Target Speed");
+        Check(profilePath.Find("MCLK").Source == "Auto",
+            "0x3A == 1 must not report manual MCLK from AOD speed");
+        Check(profilePath.Find("tCL").Source == "AOD" && profilePath.Find("FCLK").Source == "AOD",
+            "alternate speed path does not disable timing or independent FCLK");
+        aod[0x3A] = 0;
+        Check(DrfxiSettingOrigins.FromBlobs(cbs, aod).Find("Speed").Source == "AOD",
+            "0x3A == 0 also permits the AOD speed token");
+        aod[0x3A] = 0xFF;
+        Set16(aod, 0x3D, 6100);
+        Check(!DrfxiSettingOrigins.FromBlobs(cbs, aod).IsMatched,
+            "0x3A == 0xFF validates AOD speed range/step");
+        aod[0x3A] = 1;
+        Check(DrfxiSettingOrigins.FromBlobs(cbs, aod).IsMatched,
+            "0x3A == 1 ignores unrelated target-speed value");
+        aod[0x3A] = 0xFF;
+        Set16(aod, 0x3D, 6000);
+
         foreach (var t in manualTimings)
             Check(r.Find(t.Row).Source == "AOD" && r.Find(t.Row).StoredNumber == t.Val,
                 "full owner AOD timing " + t.Row);

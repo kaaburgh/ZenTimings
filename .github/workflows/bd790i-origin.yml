@@ -69,7 +69,7 @@ jobs:
           $releaseZip = Join-Path $env:RUNNER_TEMP 'ZenTimings-v142.713-official.zip'
           $nativeDir = Join-Path $env:RUNNER_TEMP 'zentimings-official-native'
           $officialUrl = 'https://github.com/irusanov/ZenTimings/releases/download/v142.713/ZenTimings_v142.713.zip'
-          $officialDigest = 'C49F5A4A66A2C438D8B2BDD FDE5338DF67AD8BED835A5F2E3AD421B21C4D76A0'.Replace(' ', '')
+          $officialDigest = 'C49F5A4A66A2C438D8B2BDDFDE5338DF67AD8BED835A5F2E3AD421B21C4D76A0'
           $ProgressPreference = 'SilentlyContinue'
           Invoke-WebRequest -Uri $officialUrl -OutFile $releaseZip -MaximumRetryCount 3 -RetryIntervalSec 5
           $actualDigest = (Get-FileHash -Algorithm SHA256 -LiteralPath $releaseZip).Hash
@@ -102,7 +102,7 @@ jobs:
             'PR: https://github.com/kaaburgh/ZenTimings/pull/1'
             "Git commit: $sourceCommit"
             'Configuration: Release, Any CPU, .NET Framework 4.7.2'
-            'Not signed. Not tested on physical DRFXI hardware. Does not write UEFI variables.'
+            'Not signed. Origin column tested on one BD790i X3D (BIOS 1.15); updated Speed/MCLK and BMC fixes need verification. Does not write UEFI variables.'
             'IMPORTANT: Includes the legacy InpOut native library for AOD/APOB reads.'
             'The native library may load a legacy kernel driver, which Windows 11 security can block.'
             'Do not disable Memory Integrity or Microsoft vulnerable driver protections to run it.'

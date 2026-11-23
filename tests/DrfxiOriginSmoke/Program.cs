@@ -62,6 +62,42 @@ internal static class Program
         Check(r.Find("BGS").Source == "?", "BGS mapping unknown");
         Check(r.Find("UCLK").Source == "Auto", "UCLK defaults to Auto");
 
+        // Phase 2: select a versioned catalog candidate and validate its live
+        // variable fingerprints independently before running the DRFXI resolver.
+        var catalog115 = BiosOriginLayoutCatalog.Select("DRFXI", "1.15");
+        Check(catalog115 != null && catalog115.LayoutId == "drfxi-dragonrange-v1"
+            && catalog115.Status == "verified", "DRFXI 1.15 verified catalog entry");
+        var catalog117 = BiosOriginLayoutCatalog.Select("DRFXI", "BIOS 1.17");
+        Check(catalog117 != null && catalog117.Status == "derived",
+            "DRFXI 1.17 still only derived, not hardware verified");
+        Check(BiosOriginLayoutCatalog.Select("NotDRFXI", "1.15") == null,
+            "board token never matches a substring");
+        Check(BiosOriginLayoutCatalog.Select("DRFXI", "1.15.9") == null,
+            "version prefix is not enough to match a BIOS release");
+        Check(BiosOriginLayoutCatalog.Select("DRFXI", "1.19") == null,
+            "unsupported firmware never chooses a layout");
+        Check(BiosOriginLayoutCatalog.Select("Other board", "1.15") == null,
+            "unsupported board never chooses a layout");
+        Check(catalog115.Resolver == "drfxi-dragonrange-v1"
+            && catalog115.Variables.Count == 2, "catalog specifies trusted resolver and varstores");
+        var fingerprintBlobs = new System.Collections.Generic.Dictionary<string, byte[]>(
+            StringComparer.OrdinalIgnoreCase) { { "AmdSetupRPL", cbs }, { "AodSetupRpl", aod } };
+        Check(catalog115.CheckFingerprint(fingerprintBlobs) == null,
+            "correct variable sizes and CBS header pass catalog fingerprint");
+        byte[] brokenAmd = (byte[])cbs.Clone();
+        brokenAmd[8] ^= 0x01;
+        fingerprintBlobs["AmdSetupRPL"] = brokenAmd;
+        Check(catalog115.CheckFingerprint(fingerprintBlobs)?.Contains("0x8") == true,
+            "changed generation rejects catalog fingerprint");
+        fingerprintBlobs["AmdSetupRPL"] = new byte[20];
+        Check(catalog115.CheckFingerprint(fingerprintBlobs)?.Contains("size") == true,
+            "incorrect varstore size rejects catalog fingerprint");
+        fingerprintBlobs.Remove("AodSetupRpl");
+        Check(catalog115.CheckFingerprint(fingerprintBlobs)?.Contains("missing") == true,
+            "missing varstore rejects catalog fingerprint");
+        fingerprintBlobs["AmdSetupRPL"] = cbs;
+        fingerprintBlobs["AodSetupRpl"] = aod;
+
         // Synthesized full 1.15 owner configuration, documented in the AFU /O readback.
         // Not a raw NVRAM fixture: those bytes were not committed to the research repository.
         aod[0x3C] = 1;

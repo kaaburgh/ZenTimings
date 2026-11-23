@@ -15,6 +15,12 @@ namespace ZenTimings.BiosOrigin
     {
         public const string ResourceName = "ZenTimings.Resources.BiosLayouts.catalog-v1.json";
 
+        // An AI-proposed mapping is never automatically trusted, even if its
+        // varstore sizes/header happen to match. A maintainer must promote it
+        // after evidence review; there is no implicit opt-in.
+        public static bool MayDisplayOrigins(string status) =>
+            status == "verified" || status == "derived";
+
         public static BiosOriginCatalogMatch Select(string board, string biosVersion)
         {
             using (Stream stream = typeof(BiosOriginLayoutCatalog).Assembly.GetManifestResourceStream(ResourceName))
@@ -87,41 +93,41 @@ namespace ZenTimings.BiosOrigin
         [DataContract]
         internal sealed class Catalog
         {
-            [DataMember(Name = "schemaVersion")] public int SchemaVersion;
-            [DataMember(Name = "layouts")] public List<LayoutEntry> Layouts;
+            [DataMember(Name = "schemaVersion")] public int SchemaVersion
+            [DataMember(Name = "layouts")] public List<LayoutEntry> Layouts
         }
 
         [DataContract]
         internal sealed class LayoutEntry
         {
-            [DataMember(Name = "id")] public string Id;
-            [DataMember(Name = "resolver")] public string Resolver;
-            [DataMember(Name = "boardTokens")] public List<string> BoardTokens;
-            [DataMember(Name = "releases")] public List<Release> Releases;
-            [DataMember(Name = "variables")] public List<VariableFingerprint> Variables;
+            [DataMember(Name = "id")] public string Id
+            [DataMember(Name = "resolver")] public string Resolver
+            [DataMember(Name = "boardTokens")] public List<string> BoardTokens
+            [DataMember(Name = "releases")] public List<Release> Releases
+            [DataMember(Name = "variables")] public List<VariableFingerprint> Variables
         }
 
         [DataContract]
         internal sealed class Release
         {
-            [DataMember(Name = "version")] public string Version;
-            [DataMember(Name = "status")] public string Status;
+            [DataMember(Name = "version")] public string Version
+            [DataMember(Name = "status")] public string Status
         }
 
         [DataContract]
         internal sealed class VariableFingerprint
         {
-            [DataMember(Name = "name")] public string Name;
-            [DataMember(Name = "guid")] public string Guid;
-            [DataMember(Name = "size")] public int Size;
-            [DataMember(Name = "headers")] public List<HeaderValue> Headers;
+            [DataMember(Name = "name")] public string Name
+            [DataMember(Name = "guid")] public string Guid
+            [DataMember(Name = "size")] public int Size
+            [DataMember(Name = "headers")] public List<HeaderValue> Headers
         }
 
         [DataContract]
         internal sealed class HeaderValue
         {
-            [DataMember(Name = "offset")] public int Offset;
-            [DataMember(Name = "u32")] public uint Value;
+            [DataMember(Name = "offset")] public int Offset
+            [DataMember(Name = "u32")] public uint Value
         }
 
         public sealed class BiosOriginCatalogMatch

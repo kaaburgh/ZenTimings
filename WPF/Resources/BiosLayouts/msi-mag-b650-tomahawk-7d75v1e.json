@@ -17,12 +17,18 @@
   },
   "setupProfiles": {
     "aXmpOffsets": [
+      115,
       1429,
       1785
     ],
     "expoOffsets": [
+      116,
       1430,
       1786
+    ],
+    "memoryTryItOffsets": [
+      1431,
+      1787
     ]
   },
   "timings": [
@@ -371,6 +377,8 @@
     "AOD-over-CBS precedence is not established for this MSI BIOS. If both menus are Manual, the resolver reports unknown.",
     "MSI Setup declares A-XMP selectors at 0x595/0x6F9 and EXPO selectors at 0x596/0x6FA. The two conditional UI groups are not yet resolved to a single active selector; raw values are diagnostic only.",
     "The AOD speed selector at 0x3A is an unnamed numeric IFR field. Its MSI-specific write semantics are not established; AOD Speed is not inferred from it.",
-    "The external StdDefaults NVRAM block contains AmdSetupRPL but no AodSetupRpl default entry. AOD IFR declares AodSetupRpl with size 0x320; runtime visibility must be checked on hardware."
+    "The external StdDefaults NVRAM block contains AmdSetupRPL but no AodSetupRpl default entry. AOD IFR declares AodSetupRpl with size 0x320; runtime visibility must be checked on hardware.",
+    "Comparison with 7D75v1E5 (2024-01-25) confirms that AMD CBS/AOD IFR matches exactly. MSI Setup increased from 0x7C2 to 0x7C4 in 1E0; EXPO/A-XMP and Memory Try It offsets stay the same.",
+    "MSI's own Setup has an independent DRAM Frequency menu at 0x51B/0x68C, High-Efficiency Mode and Memory Try It; this first resolver must not label timings/Speed as Auto merely because CBS/AOD gate bytes are Auto."
   ]
 }

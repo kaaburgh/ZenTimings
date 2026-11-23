@@ -67,7 +67,7 @@ namespace ZenTimings.BiosOrigin
                 if (cbsGate && aodAvailable && !aodGate)
                 {
                     speed = Stored("Speed", "speed", "CBS", U16(amd, layout.Speed.CbsValue),
-                        "AMD CBS Memory Target Speed is Manual.");
+                        "AMD CBS Memory Target Speed is Manual. " + profileDetails);
                 }
                 else if (cbsGate || aodGate || !aodAvailable || !setupAvailable || profileSelected)
                 {

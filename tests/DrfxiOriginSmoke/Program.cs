@@ -279,6 +279,22 @@ internal static class Program
         Check(replay.Find("Speed").Details.Contains("Layout catalog:")
             && replay.Find("Speed").Details.Contains("Verified against"),
             "origin tooltip discloses verified catalog provenance");
+        var unverifiedReplay = DrfxiSettingOrigins.FromDebugReport("DRFXI", "1.17", text);
+        Check(unverifiedReplay.IsMatched && unverifiedReplay.Status.Contains("catalog status=derived"),
+            "BIOS 1.17 retains derived evidence status until hardware validation");
+        Check(unverifiedReplay.Find("Speed").Details.Contains("no hardware readout verified"),
+            "derived origin tooltip never claims physical verification");
+        Check(!DrfxiSettingOrigins.FromDebugReport("NOTDRFXI", "1.15", text).IsMatched,
+            "offline report cannot bypass board catalog gate");
+        Check(!DrfxiSettingOrigins.FromDebugReport("DRFXI", "1.19", text).IsMatched,
+            "offline report cannot bypass firmware version gate");
+        byte[] invalidHeader = (byte[])savedCbs.Clone();
+        invalidHeader[8] ^= 1;
+        string invalidReport = "AmdSetupRPL.base64: " + Convert.ToBase64String(invalidHeader) + "\n"
+            + "AodSetupRpl.base64: " + Convert.ToBase64String(savedAod) + "\n";
+        var wrongFingerprint = DrfxiSettingOrigins.FromDebugReport("DRFXI", "1.15", invalidReport);
+        Check(!wrongFingerprint.IsMatched && wrongFingerprint.Plausibility.StartsWith("failed:"),
+            "offline report never accepts mismatched catalog fingerprint");
 
         // The DDR5 debug report previously dereferenced BMC.Table even though BMC was null.
         Check(BiosMemoryControllerDebug.Dump(null, false).Single().StartsWith("Not applicable:"),

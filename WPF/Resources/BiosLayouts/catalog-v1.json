@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "layouts": [
+    {
+      "id": "drfxi-dragonrange-v1",
+      "resolver": "drfxi-dragonrange-v1",
+      "boardTokens": [
+        "DRFXI"
+      ],
+      "releases": [
+        {
+          "version": "1.15",
+          "status": "verified"
+        },
+        {
+          "version": "1.17",
+          "status": "derived"
+        }
+      ],
+      "variables": [
+        {
+          "name": "AmdSetupRPL",
+          "guid": "3a997502-647a-4c82-998e-52ef9486a247",
+          "size": 1749,
+          "headers": [
+            {
+              "offset": 0,
+              "u32": 4232074154
+            },
+            {
+              "offset": 4,
+              "u32": 728
+            },
+            {
+              "offset": 8,
+              "u32": 1268602889
+            }
+          ]
+        },
+        {
+          "name": "AodSetupRpl",
+          "guid": "5ed15dc0-edef-4161-9151-6014c4cc630c",
+          "size": 428,
+          "headers": []
+        }
+      ]
+    }
+  ]
+}

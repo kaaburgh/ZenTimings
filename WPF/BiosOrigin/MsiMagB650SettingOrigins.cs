@@ -16,19 +16,23 @@ namespace ZenTimings.BiosOrigin
         public const string LayoutResource =
             "ZenTimings.Resources.BiosLayouts.msi-mag-b650-tomahawk-7d75v1e.json";
 
-        public static SettingOriginReport FromBlobs(byte[] amd, byte[] aod, byte[] setup)
+        public static SettingOriginReport FromBlobs(byte[] amd, byte[] aod, byte[] setup,
+            BiosOriginLayoutCatalog.BiosOriginCatalogMatch firmware)
         {
             try
             {
                 Layout layout = LoadLayout();
-                string reason = CheckPlausibility(layout, amd, aod, setup);
+                if (firmware == null || firmware.Resolver != "msi-mag-b650-raphael-v1e"
+                    || firmware.LayoutId != layout.Id)
+                    return Unavailable("MSI firmware resolver requires its matching catalog release.");
+                string reason = CheckPlausibility(layout, amd, aod, setup, firmware);
                 if (reason != null)
                     return new SettingOriginReport
                     {
                         LayoutId = layout.Id,
                         IsMatched = false,
                         Plausibility = "failed: " + reason,
-                        Status = "MSI 7D75v1E layout rejected: " + reason,
+                        Status = "MSI " + firmware.ReleaseVersion + " layout rejected: " + reason,
                         AmdSetup = amd == null ? null : (byte[])amd.Clone(),
                         AodSetup = aod == null ? null : (byte[])aod.Clone(),
                         Setup = setup == null ? null : (byte[])setup.Clone()
@@ -51,7 +55,8 @@ namespace ZenTimings.BiosOrigin
                     LayoutId = layout.Id,
                     IsMatched = true,
                     Plausibility = "passed",
-                    Status = "matched (MSI 7D75v1E IFR-derived saved setup; hardware validation pending)",
+                    Status = "matched (MSI " + firmware.ReleaseVersion
+                        + " IFR-derived saved setup; hardware validation pending)",
                     AmdSetup = (byte[])amd.Clone(),
                     AodSetup = aodAvailable ? (byte[])aod.Clone() : null,
                     Setup = setupAvailable ? (byte[])setup.Clone() : null
@@ -187,14 +192,20 @@ namespace ZenTimings.BiosOrigin
                     : "Those selectors are zero, but other MSI OC/DRAM Timing controls remain unmapped.");
         }
 
-        private static string CheckPlausibility(Layout layout, byte[] amd, byte[] aod, byte[] setup)
+        private static string CheckPlausibility(Layout layout, byte[] amd, byte[] aod, byte[] setup,
+            BiosOriginLayoutCatalog.BiosOriginCatalogMatch firmware)
         {
-            if (amd == null || amd.Length != layout.Fingerprint.AmdSize)
-                return "AmdSetupRPL size is not 0x" + layout.Fingerprint.AmdSize.ToString("X");
-            if (aod != null && aod.Length != layout.Fingerprint.AodSize)
-                return "AodSetupRpl size is not 0x" + layout.Fingerprint.AodSize.ToString("X");
-            if (setup != null && setup.Length != layout.Fingerprint.SetupSize)
-                return "Setup size is not 0x" + layout.Fingerprint.SetupSize.ToString("X");
+            // The shared mapping contains offsets only. The selected BIOS release
+            // provides the authoritative, independently checked varstore sizes.
+            int amdSize = firmware.ExpectedSize("AmdSetupRPL");
+            int aodSize = firmware.ExpectedSize("AodSetupRpl");
+            int setupSize = firmware.ExpectedSize("Setup");
+            if (amd == null || amd.Length != amdSize)
+                return "AmdSetupRPL size is not 0x" + amdSize.ToString("X");
+            if (aod != null && aod.Length != aodSize)
+                return "AodSetupRpl size is not 0x" + aodSize.ToString("X");
+            if (setup != null && setup.Length != setupSize)
+                return "Setup size is not 0x" + setupSize.ToString("X");
 
             int cbsGate = amd[layout.Gates.CbsActive];
             if (cbsGate != 1 && cbsGate != 255)
@@ -274,19 +285,10 @@ namespace ZenTimings.BiosOrigin
         private sealed class Layout
         {
             [DataMember(Name = "id")] public string Id;
-            [DataMember(Name = "fingerprint")] public Fingerprint Fingerprint;
             [DataMember(Name = "gates")] public Gates Gates;
             [DataMember(Name = "speed")] public Speed Speed;
             [DataMember(Name = "setupProfiles")] public SetupProfiles SetupProfiles;
             [DataMember(Name = "timings")] public List<TimingField> Timings;
-        }
-
-        [DataContract]
-        private sealed class Fingerprint
-        {
-            [DataMember(Name = "amdSize")] public int AmdSize;
-            [DataMember(Name = "aodSize")] public int AodSize;
-            [DataMember(Name = "setupSize")] public int SetupSize;
         }
 
         [DataContract]

@@ -32,7 +32,9 @@ namespace ZenTimings.BiosOrigin
                 var candidates = catalog.Layouts
                     .Where(layout => BoardMatches(layout, board))
                     .SelectMany(layout => layout.Releases
-                        .Where(release => VersionMatches(biosVersion, release.Version))
+                        .Where(release => VersionMatches(biosVersion, release.Version)
+                            || (release.Aliases != null && release.Aliases.Any(a =>
+                                VersionMatches(biosVersion, a))))
                         .Select(release => new BiosOriginCatalogMatch(layout, release)))
                     .ToList();
                 if (candidates.Count > 1)
@@ -55,7 +57,7 @@ namespace ZenTimings.BiosOrigin
         {
             if (string.IsNullOrWhiteSpace(running)) return false;
             return Regex.IsMatch(running, @"(?:^|[^0-9.])" + Regex.Escape(expected)
-                + @"(?:$|[^0-9.])", RegexOptions.CultureInvariant);
+                + @"(?:$|[^0-9.])", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
         }
 
         private static void Validate(Catalog catalog)
@@ -73,10 +75,17 @@ namespace ZenTimings.BiosOrigin
                     || entry.Releases == null || entry.Releases.Count == 0
                     || entry.Variables == null || entry.Variables.Count == 0)
                     throw new InvalidDataException("Invalid origin layout entry.");
-                if (entry.Releases.Any(r => string.IsNullOrWhiteSpace(r.Version)
-                    || (r.Status != "verified" && r.Status != "derived" && r.Status != "ai-proposed"))
-                    || entry.Releases.Select(r => r.Version).Distinct(StringComparer.Ordinal).Count() != entry.Releases.Count)
+                if (entry.Releases.Any(r => r == null || string.IsNullOrWhiteSpace(r.Version)
+                    || (r.Status != "verified" && r.Status != "derived" && r.Status != "ai-proposed")
+                    || (r.Aliases != null && r.Aliases.Any(string.IsNullOrWhiteSpace))))
                     throw new InvalidDataException("Invalid origin layout release status/version.");
+                var knownVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (Release release in entry.Releases)
+                {
+                    if (!knownVersions.Add(release.Version)
+                        || (release.Aliases != null && release.Aliases.Any(a => !knownVersions.Add(a))))
+                        throw new InvalidDataException("Duplicate BIOS version or alias in a layout.");
+                }
                 var variableKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (VariableFingerprint variable in entry.Variables)
                 {
@@ -130,6 +139,7 @@ namespace ZenTimings.BiosOrigin
         internal sealed class Release
         {
             [DataMember(Name = "version")] public string Version;
+            [DataMember(Name = "aliases")] public List<string> Aliases;
             [DataMember(Name = "status")] public string Status;
             [DataMember(Name = "fingerprintOverrides")] public List<VariableSizeOverride> FingerprintOverrides;
         }

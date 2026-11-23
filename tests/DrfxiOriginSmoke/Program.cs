@@ -90,6 +90,33 @@ internal static class Program
         Check(!BiosOriginLayoutCatalog.MayDisplayOrigins("ai-proposed")
             && !BiosOriginLayoutCatalog.MayDisplayOrigins(null),
             "AI-proposed or unknown catalog evidence never silently enables badges");
+
+        // MSI MAG B650 TOMAHAWK WIFI 7D75v1E is a recognized candidate only.
+        // Its vendor/CBS/AOD semantics remain untrusted, so neither live nor offline
+        // origin display may run a resolver. The opt-in debug capture uses this list.
+        var msiCandidate = BiosOriginLayoutCatalog.Select(
+            "MAG B650 TOMAHAWK WIFI (MS-7D75)", "E7D75AMS.1E0");
+        Check(msiCandidate != null && msiCandidate.LayoutId == "msi-mag-b650-tomahawk-wifi-7d75v1e",
+            "MSI board and exact BIOS image ID select the candidate layout");
+        Check(msiCandidate.Status == "ai-proposed" && !BiosOriginLayoutCatalog.MayDisplayOrigins(msiCandidate.Status),
+            "MSI image remains fail-closed until maintainer promotion");
+        Check(msiCandidate.Resolver == "msi-mag-b650-tomahawk-wifi-7d75v1e-pending"
+            && msiCandidate.Variables.Count == 6,
+            "MSI candidate captures Setup, MSI OC, CBS RPL/PHX and AOD RPL/PHX variables");
+        Check(msiCandidate.Variables.Select(v => v.Name).OrderBy(n => n, StringComparer.Ordinal).SequenceEqual(
+            new[] { "AmdSetupPHX", "AmdSetupRPL", "AodSetupPhx", "AodSetupRpl", "MsiOcInfoFlag", "Setup" }
+                .OrderBy(n => n, StringComparer.Ordinal)),
+            "MSI candidate variable names are complete and deterministic");
+        Check(msiCandidate.Variables.All(v => v.Guid.StartsWith("{") && v.Guid.EndsWith("}")),
+            "MSI candidate GUIDs are canonical Win32 UEFI API strings");
+        Check(BiosOriginLayoutCatalog.Select("NOTMS-7D75", "E7D75AMS.1E0") == null,
+            "MSI board token never matches a larger unrelated identifier");
+        Check(BiosOriginLayoutCatalog.Select("MS-7D75", "E7D75AMS.1E01") == null,
+            "MSI BIOS version matching rejects a longer version prefix");
+        var msiReplay = DrfxiSettingOrigins.FromDebugReport("MS-7D75", "E7D75AMS.1E0", "no blobs");
+        Check(!msiReplay.IsMatched && msiReplay.LayoutId == msiCandidate.LayoutId
+            && msiReplay.Status.Contains("AI-proposed"),
+            "offline replay identifies MSI candidate but refuses untrusted origin display");
         var fingerprintBlobs = new System.Collections.Generic.Dictionary<string, byte[]>(
             StringComparer.OrdinalIgnoreCase) { { "AmdSetupRPL", cbs }, { "AodSetupRpl", aod } };
         Check(catalog115.CheckFingerprint(fingerprintBlobs) == null,

@@ -121,6 +121,7 @@ namespace ZenTimings.BiosOrigin
             [DataMember(Name = "guid")] public string Guid;
             [DataMember(Name = "size")] public int Size;
             [DataMember(Name = "headers")] public List<HeaderValue> Headers;
+            [DataMember(Name = "optional")] public bool Optional;
         }
 
         [DataContract]
@@ -145,7 +146,7 @@ namespace ZenTimings.BiosOrigin
             public string Status { get; }
 
             public IReadOnlyList<BiosOriginCatalogVariable> Variables =>
-                entry.Variables.Select(v => new BiosOriginCatalogVariable(v.Name, v.Guid)).ToList();
+                entry.Variables.Select(v => new BiosOriginCatalogVariable(v.Name, v.Guid, v.Optional)).ToList();
 
             // Evaluates the full fingerprint, not just SMBIOS model and version.
             // Missing blobs are mismatches; never assume that a candidate is valid.
@@ -156,7 +157,10 @@ namespace ZenTimings.BiosOrigin
                 {
                     byte[] bytes;
                     if (!blobs.TryGetValue(variable.Name, out bytes) || bytes == null)
+                    {
+                        if (variable.Optional) continue;
                         return variable.Name + ": missing UEFI variable";
+                    }
                     if (bytes.Length != variable.Size)
                         return variable.Name + ": unexpected variable size";
                     foreach (HeaderValue header in variable.Headers)
@@ -175,15 +179,17 @@ namespace ZenTimings.BiosOrigin
 
         public sealed class BiosOriginCatalogVariable
         {
-            internal BiosOriginCatalogVariable(string name, string guid)
+            internal BiosOriginCatalogVariable(string name, string guid, bool optional)
             {
                 Name = name;
+                Optional = optional;
                 // Win32 GetFirmwareEnvironmentVariableExW requires a GUID string
                 // with braces, even though the catalog stores canonical UUIDs.
                 Guid = "{" + System.Guid.Parse(guid).ToString("D") + "}";
             }
             public string Name { get; }
             public string Guid { get; }
+            public bool Optional { get; }
         }
     }
 }

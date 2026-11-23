@@ -56,7 +56,7 @@
                   IsChecked="False"
                   Margin="7,0,5,2"
                   Foreground="{DynamicResource TextColor}"
-                  ToolTip="Adds base64 of both UEFI setup variables so the origin column can be reproduced offline." />
+                  ToolTip="Adds base64 of available variables from the matched board/BIOS candidate, plus returned attributes. Includes sensitive BIOS settings; nothing is uploaded." />
 
         <Border Padding="5" Grid.Column="0" Grid.Row="3" Grid.ColumnSpan="2">
             <Grid>

@@ -1,0 +1,965 @@
+{
+  "schemaVersion": 1,
+  "id": "msi-mag-b650-tomahawk-wifi-7d75v1e",
+  "status": "ai-proposed",
+  "provenance": {
+    "archive": "7D75v1E.zip",
+    "image": "7D75v1E/E7D75AMS.1E0",
+    "imageBytes": 33554432,
+    "imageSha256": "cc84d397d04617d86f2980dd79e04ef90fb3302b72e47adf43f54c52eff4f368",
+    "releaseNotes": "7D75v1E/7D75v1x.txt",
+    "releaseDate": "2024-02-21",
+    "biosVendor": "AMI",
+    "agesa": "ComboPI 1.1.0.2b",
+    "extraction": {
+      "uefi": "UEFIExtract_A75 (all tree)",
+      "ifr": "IFRExtractor-RS 1.6.1",
+      "input": "raw 32 MiB BIOS image extracted from vendor ZIP"
+    }
+  },
+  "board": {
+    "vendor": "MSI",
+    "product": "MAG B650 TOMAHAWK WIFI",
+    "smbiosTokens": [
+      "MS-7D75",
+      "MAG B650 TOMAHAWK WIFI"
+    ]
+  },
+  "firmwareModules": [
+    "Setup",
+    "CbsSetupDxeRPL",
+    "CbsSetupDxePHX",
+    "AodDxe",
+    "AodSmm",
+    "MsiOcDxe",
+    "MsiOcSmi",
+    "MsiOcMemSPDDxe",
+    "MsiOcMemSPDPei"
+  ],
+  "varstores": [
+    {
+      "name": "Setup",
+      "guid": "ec87d643-eba4-4bb5-a1e5-3f3e36b20da9",
+      "size": 1988,
+      "source": "Setup IFR + StdDefaults NVAR",
+      "defaultNvar": {
+        "present": true,
+        "attributes": "0x83",
+        "runtimeAttribute": true
+      }
+    },
+    {
+      "name": "MsiOcInfoFlag",
+      "guid": "48419251-dd85-4597-84b4-11182014adde",
+      "size": 243,
+      "source": "Setup IFR varstore; referenced by MSI OC form conditions",
+      "defaultNvar": {
+        "present": false,
+        "runtimeAttribute": "unknown"
+      }
+    },
+    {
+      "name": "AmdSetupRPL",
+      "guid": "3a997502-647a-4c82-998e-52ef9486a247",
+      "size": 1913,
+      "source": "CbsSetupDxeRPL IFR + StdDefaults NVAR",
+      "defaultNvar": {
+        "present": true,
+        "attributes": "0x83",
+        "runtimeAttribute": true
+      }
+    },
+    {
+      "name": "AmdSetupPHX",
+      "guid": "3a997502-647a-4c82-998e-52ef9486a247",
+      "size": 2097,
+      "source": "CbsSetupDxePHX IFR + StdDefaults NVAR",
+      "defaultNvar": {
+        "present": true,
+        "attributes": "0x83",
+        "runtimeAttribute": true
+      }
+    },
+    {
+      "name": "AodSetupRpl",
+      "guid": "5ed15dc0-edef-4161-9151-6014c4cc630c",
+      "size": 800,
+      "source": "AodDxe IFR; AodSmm contains variable name",
+      "defaultNvar": {
+        "present": false,
+        "runtimeAttribute": "unknown"
+      }
+    },
+    {
+      "name": "AodSetupPhx",
+      "guid": "5ed15dc0-edef-4161-9151-6014c4cc630c",
+      "size": 800,
+      "source": "AodDxe IFR; AodSmm contains variable name",
+      "defaultNvar": {
+        "present": false,
+        "runtimeAttribute": "unknown"
+      }
+    }
+  ],
+  "cpuPathSelectors": [
+    {
+      "questionId": "0x2C8",
+      "variable": "MsiOcInfoFlag",
+      "offset": "0x01",
+      "meaning": "MSI OC CPU/platform branch selector; value-to-family mapping not yet decoded"
+    },
+    {
+      "questionId": "0x2C9",
+      "variable": "MsiOcInfoFlag",
+      "offset": "0x18",
+      "meaning": "additional MSI OC visibility/branch gate; value-to-family mapping not yet decoded"
+    }
+  ],
+  "msiOc": {
+    "variable": "Setup",
+    "raphaelPath": {
+      "selector": "MsiOcInfoFlag.QuestionId 0x2C8 == 2 (plus QuestionId 0x2C9 == 1 conditions)",
+      "fields": [
+        {
+          "name": "A-XMP",
+          "offset": "0x595",
+          "width": 8,
+          "options": {
+            "0": "Disabled",
+            "1": "Profile 1",
+            "2": "Profile 2",
+            "3": "Profile 3",
+            "4": "User Profile 1",
+            "5": "User Profile 2"
+          }
+        },
+        {
+          "name": "EXPO",
+          "offset": "0x596",
+          "width": 8,
+          "options": {
+            "0": "Disabled",
+            "1": "Profile 1",
+            "2": "Profile 2",
+            "3": "User Profile 1"
+          }
+        },
+        {
+          "name": "DRAM Frequency",
+          "offset": "0x51B",
+          "width": 16,
+          "units": "MT/s",
+          "auto": 65535
+        },
+        {
+          "name": "FCLK Frequency",
+          "offset": "0x516",
+          "width": 16,
+          "units": "MHz",
+          "auto": 65535
+        },
+        {
+          "name": "UCLK DIV1 MODE",
+          "offset": "0x518",
+          "width": 8,
+          "options": {
+            "0": "UCLK=MEMCLK/2",
+            "1": "UCLK=MEMCLK",
+            "255": "Auto"
+          }
+        },
+        {
+          "name": "Memory Context Restore",
+          "offset": "0x594",
+          "width": 8,
+          "auto": 255
+        },
+        {
+          "name": "Memory Try It!",
+          "offset": "0x597",
+          "width": 16
+        }
+      ]
+    },
+    "alternatePath": {
+      "selector": "MsiOcInfoFlag.QuestionId 0x2C8 in [3,4] (plus QuestionId 0x2C9 == 1 conditions)",
+      "fields": [
+        {
+          "name": "A-XMP",
+          "offset": "0x6F9",
+          "width": 8
+        },
+        {
+          "name": "EXPO",
+          "offset": "0x6FA",
+          "width": 8
+        },
+        {
+          "name": "DRAM Frequency",
+          "offset": "0x68C",
+          "width": 16,
+          "units": "MT/s",
+          "auto": 65535
+        },
+        {
+          "name": "FCLK Frequency",
+          "offset": "0x686",
+          "width": 16,
+          "units": "MHz",
+          "auto": 65535
+        },
+        {
+          "name": "UCLK DIV1 MODE",
+          "offset": "0x688",
+          "width": 8,
+          "options": {
+            "0": "UCLK=MEMCLK/2",
+            "1": "UCLK=MEMCLK",
+            "255": "Auto"
+          }
+        },
+        {
+          "name": "Memory Context Restore",
+          "offset": "0x6F8",
+          "width": 8,
+          "auto": 255
+        },
+        {
+          "name": "Memory Try It!",
+          "offset": "0x6FB",
+          "width": 16
+        }
+      ]
+    },
+    "ignoredLegacyFields": [
+      {
+        "name": "A-XMP",
+        "offset": "0x73",
+        "note": "under unconditional SuppressIf True; do not treat as active selector"
+      },
+      {
+        "name": "AMD EXPO",
+        "offset": "0x74",
+        "note": "under unconditional SuppressIf True; do not treat as active selector"
+      }
+    ]
+  },
+  "amdCbs": {
+    "raphael": {
+      "variable": "AmdSetupRPL",
+      "size": 1913,
+      "activeMemoryTimingSettings": {
+        "offset": "0x116",
+        "width": 8,
+        "options": {
+          "1": "Enabled",
+          "255": "Auto"
+        }
+      },
+      "memoryTargetSpeed": {
+        "offset": "0x117",
+        "width": 16,
+        "units": "MT/s",
+        "range": [
+          2000,
+          11200
+        ],
+        "step": 200,
+        "default": 3200
+      },
+      "timingControlValueOffsets": [
+        [
+          "tCL",
+          "0x119",
+          "0x119"
+        ],
+        [
+          "tRCD",
+          "0x11C",
+          "0x11C"
+        ],
+        [
+          "tRP",
+          "0x11F",
+          "0x11F"
+        ],
+        [
+          "tRAS",
+          "0x122",
+          "0x122"
+        ],
+        [
+          "tRC",
+          "0x125",
+          "0x125"
+        ],
+        [
+          "tWR",
+          "0x128",
+          "0x128"
+        ],
+        [
+          "tRFC1",
+          "0x12B",
+          "0x12B"
+        ],
+        [
+          "tRFC2",
+          "0x12E",
+          "0x12E"
+        ],
+        [
+          "tRFCsb",
+          "0x131",
+          "0x131"
+        ],
+        [
+          "tRTP",
+          "0x134",
+          "0x134"
+        ],
+        [
+          "tRRDL",
+          "0x137",
+          "0x137"
+        ],
+        [
+          "tRRDS",
+          "0x13A",
+          "0x13A"
+        ],
+        [
+          "tFAW",
+          "0x13D",
+          "0x13D"
+        ],
+        [
+          "tWTRL",
+          "0x140",
+          "0x140"
+        ],
+        [
+          "tWTRS",
+          "0x143",
+          "0x143"
+        ],
+        [
+          "tRDRDSCL",
+          "0x146",
+          "0x146"
+        ],
+        [
+          "tRDRDSC",
+          "0x149",
+          "0x149"
+        ],
+        [
+          "tRDRDSD",
+          "0x14C",
+          "0x14C"
+        ],
+        [
+          "tRDRDDD",
+          "0x14F",
+          "0x14F"
+        ],
+        [
+          "tWRWRSCL",
+          "0x152",
+          "0x152"
+        ],
+        [
+          "tWRWRSC",
+          "0x155",
+          "0x155"
+        ],
+        [
+          "tWRWRSD",
+          "0x158",
+          "0x158"
+        ],
+        [
+          "tWRWRDD",
+          "0x15B",
+          "0x15B"
+        ],
+        [
+          "tWRRD",
+          "0x15E",
+          "0x15E"
+        ],
+        [
+          "tRDWR",
+          "0x161",
+          "0x161"
+        ]
+      ],
+      "powerDownEnable": {
+        "offset": "0x16F",
+        "width": 8
+      },
+      "memoryContextRestore": {
+        "offset": "0x26C",
+        "width": 8
+      },
+      "infinityFabricFrequency": {
+        "offset": "0x269",
+        "width": 8,
+        "auto": 255,
+        "options": "IFR enumerated MHz table"
+      }
+    },
+    "phoenix": {
+      "variable": "AmdSetupPHX",
+      "size": 2097,
+      "activeMemoryTimingSettings": {
+        "offset": "0x05E",
+        "width": 8,
+        "options": {
+          "1": "Enabled",
+          "255": "Auto"
+        }
+      },
+      "memoryTargetSpeed": {
+        "offset": "0x05F",
+        "width": 16,
+        "units": "MT/s",
+        "range": [
+          2000,
+          12000
+        ],
+        "step": 200,
+        "default": 3200
+      },
+      "timingControlValueOffsets": [
+        [
+          "tCL",
+          "0x61",
+          "0x61"
+        ],
+        [
+          "tRCD",
+          "0x64",
+          "0x64"
+        ],
+        [
+          "tRP",
+          "0x67",
+          "0x67"
+        ],
+        [
+          "tRAS",
+          "0x6A",
+          "0x6A"
+        ],
+        [
+          "tRC",
+          "0x6D",
+          "0x6D"
+        ],
+        [
+          "tWR",
+          "0x70",
+          "0x70"
+        ],
+        [
+          "tRFC1",
+          "0x73",
+          "0x73"
+        ],
+        [
+          "tRFC2",
+          "0x76",
+          "0x76"
+        ],
+        [
+          "tRFCsb",
+          "0x79",
+          "0x79"
+        ],
+        [
+          "tRTP",
+          "0x7C",
+          "0x7C"
+        ],
+        [
+          "tRRDL",
+          "0x7F",
+          "0x7F"
+        ],
+        [
+          "tRRDS",
+          "0x82",
+          "0x82"
+        ],
+        [
+          "tFAW",
+          "0x85",
+          "0x85"
+        ],
+        [
+          "tWTRL",
+          "0x88",
+          "0x88"
+        ],
+        [
+          "tWTRS",
+          "0x8B",
+          "0x8B"
+        ],
+        [
+          "tRDRDSCL",
+          "0x8E",
+          "0x8E"
+        ],
+        [
+          "tRDRDSC",
+          "0x91",
+          "0x91"
+        ],
+        [
+          "tRDRDSD",
+          "0x94",
+          "0x94"
+        ],
+        [
+          "tRDRDDD",
+          "0x97",
+          "0x97"
+        ],
+        [
+          "tWRWRSCL",
+          "0x9A",
+          "0x9A"
+        ],
+        [
+          "tWRWRSC",
+          "0x9D",
+          "0x9D"
+        ],
+        [
+          "tWRWRSD",
+          "0xA0",
+          "0xA0"
+        ],
+        [
+          "tWRWRDD",
+          "0xA3",
+          "0xA3"
+        ],
+        [
+          "tWRRD",
+          "0xA6",
+          "0xA6"
+        ],
+        [
+          "tRDWR",
+          "0xA9",
+          "0xA9"
+        ]
+      ],
+      "powerDownEnable": {
+        "offset": "0x0BB",
+        "width": 8
+      },
+      "memoryContextRestore": {
+        "offset": "0x437",
+        "width": 8
+      },
+      "infinityFabricFrequency": {
+        "present": false,
+        "note": "No DDR5 FCLK question identified in this CbsSetupDxePHX IFR formset"
+      }
+    }
+  },
+  "amdAod": {
+    "raphael": {
+      "variable": "AodSetupRpl",
+      "size": 800,
+      "activeMemoryTimingSettings": {
+        "offset": "0x03C",
+        "width": 8,
+        "options": {
+          "1": "Enabled",
+          "255": "Auto"
+        }
+      },
+      "memoryTargetSpeed": {
+        "offset": "0x03D",
+        "width": 16,
+        "units": "MT/s",
+        "range": [
+          2000,
+          12000
+        ],
+        "step": 200,
+        "auto": 65535
+      },
+      "timingControlValueOffsets": [
+        [
+          "tCL",
+          "0x3F",
+          "0x3F"
+        ],
+        [
+          "tRCD",
+          "0x42",
+          "0x42"
+        ],
+        [
+          "tRP",
+          "0x45",
+          "0x45"
+        ],
+        [
+          "tRAS",
+          "0x48",
+          "0x48"
+        ],
+        [
+          "tRC",
+          "0x4B",
+          "0x4B"
+        ],
+        [
+          "tWR",
+          "0x4E",
+          "0x4E"
+        ],
+        [
+          "tRFC1",
+          "0x51",
+          "0x51"
+        ],
+        [
+          "tRFC2",
+          "0x54",
+          "0x54"
+        ],
+        [
+          "tRFCsb",
+          "0x57",
+          "0x57"
+        ],
+        [
+          "tRTP",
+          "0x5A",
+          "0x5A"
+        ],
+        [
+          "tRRDL",
+          "0x5D",
+          "0x5D"
+        ],
+        [
+          "tRRDS",
+          "0x60",
+          "0x60"
+        ],
+        [
+          "tFAW",
+          "0x63",
+          "0x63"
+        ],
+        [
+          "tWTRL",
+          "0x66",
+          "0x66"
+        ],
+        [
+          "tWTRS",
+          "0x69",
+          "0x69"
+        ],
+        [
+          "tRDRDSCL",
+          "0x6C",
+          "0x6C"
+        ],
+        [
+          "tRDRDSC",
+          "0x6F",
+          "0x6F"
+        ],
+        [
+          "tRDRDSD",
+          "0x72",
+          "0x72"
+        ],
+        [
+          "tRDRDDD",
+          "0x75",
+          "0x75"
+        ],
+        [
+          "tWRWRSCL",
+          "0x78",
+          "0x78"
+        ],
+        [
+          "tWRWRSC",
+          "0x7B",
+          "0x7B"
+        ],
+        [
+          "tWRWRSD",
+          "0x7E",
+          "0x7E"
+        ],
+        [
+          "tWRWRDD",
+          "0x81",
+          "0x81"
+        ],
+        [
+          "tWRRD",
+          "0x84",
+          "0x84"
+        ],
+        [
+          "tRDWR",
+          "0x87",
+          "0x87"
+        ]
+      ],
+      "powerDownEnable": {
+        "offset": "0x093",
+        "width": 8
+      },
+      "infinityFabricFrequency": {
+        "offset": "0x094",
+        "width": 16,
+        "units": "MHz",
+        "auto": 65535
+      },
+      "uclkDiv1Mode": {
+        "offset": "0x096",
+        "width": 8,
+        "options": {
+          "0": "UCLK=MEMCLK/2",
+          "1": "UCLK=MEMCLK",
+          "255": "Auto"
+        }
+      }
+    },
+    "phoenix": {
+      "variable": "AodSetupPhx",
+      "size": 800,
+      "activeMemoryTimingSettings": {
+        "offset": "0x03A",
+        "width": 8,
+        "options": {
+          "1": "Enabled",
+          "255": "Auto"
+        }
+      },
+      "memoryTargetSpeed": {
+        "offset": "0x03B",
+        "width": 16,
+        "units": "MT/s",
+        "range": [
+          2000,
+          12000
+        ],
+        "step": 200,
+        "auto": 65535
+      },
+      "timingControlValueOffsets": [
+        [
+          "tCL",
+          "0x3D",
+          "0x3D"
+        ],
+        [
+          "tRCD",
+          "0x40",
+          "0x40"
+        ],
+        [
+          "tRP",
+          "0x43",
+          "0x43"
+        ],
+        [
+          "tRAS",
+          "0x46",
+          "0x46"
+        ],
+        [
+          "tRC",
+          "0x49",
+          "0x49"
+        ],
+        [
+          "tWR",
+          "0x4C",
+          "0x4C"
+        ],
+        [
+          "tRFC1",
+          "0x4F",
+          "0x4F"
+        ],
+        [
+          "tRFC2",
+          "0x52",
+          "0x52"
+        ],
+        [
+          "tRFCsb",
+          "0x55",
+          "0x55"
+        ],
+        [
+          "tRTP",
+          "0x58",
+          "0x58"
+        ],
+        [
+          "tRRDL",
+          "0x5B",
+          "0x5B"
+        ],
+        [
+          "tRRDS",
+          "0x5E",
+          "0x5E"
+        ],
+        [
+          "tFAW",
+          "0x61",
+          "0x61"
+        ],
+        [
+          "tWTRL",
+          "0x64",
+          "0x64"
+        ],
+        [
+          "tWTRS",
+          "0x67",
+          "0x67"
+        ],
+        [
+          "tRDRDSCL",
+          "0x6A",
+          "0x6A"
+        ],
+        [
+          "tRDRDSC",
+          "0x6D",
+          "0x6D"
+        ],
+        [
+          "tRDRDSD",
+          "0x70",
+          "0x70"
+        ],
+        [
+          "tRDRDDD",
+          "0x73",
+          "0x73"
+        ],
+        [
+          "tWRWRSCL",
+          "0x76",
+          "0x76"
+        ],
+        [
+          "tWRWRSC",
+          "0x79",
+          "0x79"
+        ],
+        [
+          "tWRWRSD",
+          "0x7C",
+          "0x7C"
+        ],
+        [
+          "tWRWRDD",
+          "0x7F",
+          "0x7F"
+        ],
+        [
+          "tWRRD",
+          "0x82",
+          "0x82"
+        ],
+        [
+          "tRDWR",
+          "0x85",
+          "0x85"
+        ]
+      ],
+      "powerDownEnable": {
+        "offset": "0x091",
+        "width": 8
+      },
+      "infinityFabricFrequency": {
+        "offset": "0x092",
+        "width": 16,
+        "units": "MHz",
+        "auto": 65535
+      },
+      "uclkDiv1Mode": {
+        "offset": "0x094",
+        "width": 8,
+        "options": {
+          "0": "UCLK=MEMCLK/2",
+          "1": "UCLK=MEMCLK",
+          "255": "Auto"
+        }
+      }
+    }
+  },
+  "factoryDefaults": {
+    "source": "StdDefaults NVAR image data, not a live machine readout",
+    "setup": {
+      "raphaelPath": {
+        "aXmp": 0,
+        "expo": 0,
+        "dramFrequency": 65535,
+        "fclk": 65535,
+        "uclkDiv1Mode": 255,
+        "memoryContextRestore": 255,
+        "memoryTryIt": 0
+      },
+      "alternatePath": {
+        "aXmp": 0,
+        "expo": 0,
+        "dramFrequency": 65535,
+        "fclk": 65535,
+        "uclkDiv1Mode": 255,
+        "memoryContextRestore": 255,
+        "memoryTryIt": 0
+      }
+    },
+    "amdCbsRaphael": {
+      "activeMemoryTimingSettings": 255,
+      "memoryTargetSpeed": 3200,
+      "tclCtrl": 0,
+      "tcl": 22,
+      "fclk": 255,
+      "powerDownEnable": 255,
+      "memoryContextRestore": 255
+    },
+    "amdCbsPhoenix": {
+      "activeMemoryTimingSettings": 255,
+      "memoryTargetSpeed": 3200,
+      "tclCtrl": 0,
+      "tcl": 22,
+      "powerDownEnable": 255,
+      "memoryContextRestore": 255
+    }
+  },
+  "limitations": [
+    "No live readout from an MSI MAG B650 TOMAHAWK WIFI was available.",
+    "The catalog entry is ai-proposed and cannot display origin badges.",
+    "The firmware exposes MSI Setup, AMD CBS and AMD AOD menus for overlapping memory settings; IFR alone does not establish which apply path wins.",
+    "The MSI OC apply path in MsiOcDxe/MsiOcSmi/MsiOcMemSPDDxe/MsiOcMemSPDPei has not been fully reverse-engineered.",
+    "AmdSetupRPL/AmdSetupPHX sizes and layouts differ from the DRFXI resolver fingerprint; matching offsets in some CBS timing fields do not justify reusing the DRFXI resolver.",
+    "AOD RPL and PHX varstores are 0x320 bytes and differ in offsets; no AOD default NVAR entries were found, so runtime presence and attributes need a live read.",
+    "CPU-family selection between RPL and PHX paths is not fully decoded; MsiOcInfoFlag exposes QuestionId 0x2C8 at offset 0x01 and QuestionId 0x2C9 at offset 0x18.",
+    "The BIOS image ID E7D75AMS.1E0 is used as the exact catalog version token; confirm the actual Windows SMBIOSBIOSVersion string on the target system."
+  ]
+}

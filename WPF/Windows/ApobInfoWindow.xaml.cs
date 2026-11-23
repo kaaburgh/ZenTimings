@@ -70,7 +70,13 @@ namespace ZenTimings.Windows
             if (_apob.Entries != null && _apob.Entries.Count > 0)
                 status.Add($"{_apob.Entries.Count} entries");
             if (_apob.ChannelTimings != null && _apob.ChannelTimings.Count > 0)
-                status.Add($"{_apob.ChannelTimings.Count} timing blocks");
+            {
+                int total = _apob.ChannelTimings.Count;
+                int active = _apob.ChannelTimings.Count(b => b.IsActive);
+                status.Add(_apob.ActiveMemClk > 0
+                    ? $"{total} timing blocks ({active} active)"
+                    : $"{total} timing blocks");
+            }
             if (!string.IsNullOrEmpty(_apob.ErrorReason))
                 status.Add(_apob.ErrorReason);
 
@@ -153,9 +159,19 @@ namespace ZenTimings.Windows
 
         private bool FillTimings()
         {
-            List<ApobChannelTimings> blocks = _apob.ChannelTimings;
-            if (blocks == null || blocks.Count == 0)
+            List<ApobChannelTimings> allBlocks = _apob.ChannelTimings;
+            if (allBlocks == null || allBlocks.Count == 0)
                 return false;
+
+            bool activeClockKnown = _apob.ActiveMemClk > 0;
+            bool hasActiveAndInactive = activeClockKnown
+                && allBlocks.Any(b => b.IsActive) && allBlocks.Any(b => !b.IsActive);
+            ShowInactiveTimingsCheckBox.Visibility = hasActiveAndInactive
+                ? Visibility.Visible : Visibility.Collapsed;
+
+            List<ApobChannelTimings> blocks = ApobTimingBlockVisibility.SelectVisible(
+                allBlocks, b => b.IsActive, activeClockKnown,
+                ShowInactiveTimingsCheckBox.IsChecked == true);
 
             var rows = new List<Row>
             {
@@ -178,8 +194,17 @@ namespace ZenTimings.Windows
                 rows.Add(row);
             }
 
-            SetupGrid(TimingsGrid, "Timing", BlockHeaders(blocks), rows, 110);
+            // Keep the original APOB channel numbers and the source P-state
+            // labeling even when inactive columns are filtered out.
+            SetupGrid(TimingsGrid, "Timing",
+                BlockHeaders(blocks, allBlocks.Any(b => b.PState > 0)), rows, 110);
             return true;
+        }
+
+        private void ShowInactiveTimingsChanged(object sender, RoutedEventArgs e)
+        {
+            if (_apob != null && _apob.IsAvailable)
+                Run(TimingsSection, FillTimings);
         }
 
         private bool FillOdt()
@@ -534,9 +559,9 @@ namespace ZenTimings.Windows
         }
 
         /// <summary>"Ch A", or "Ch A P0" when the CPU has memory P-states.</summary>
-        private static string[] BlockHeaders(IList<ApobChannelTimings> blocks)
+        private static string[] BlockHeaders(IList<ApobChannelTimings> blocks, bool originalHasPStates = false)
         {
-            bool pStates = blocks.Any(b => b.PState > 0);
+            bool pStates = originalHasPStates || blocks.Any(b => b.PState > 0);
             return blocks.Select(b => pStates ? $"Ch {ChannelLetter(b.Channel)} P{b.PState}" : $"Ch {ChannelLetter(b.Channel)}").ToArray();
         }
 

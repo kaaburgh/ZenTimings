@@ -278,6 +278,8 @@ namespace ZenTimings.BiosOrigin
                 var candidate = BiosOriginLayoutCatalog.Select(board, biosVersion);
                 if (candidate == null)
                     return Unavailable("No supported origin layout catalog entry for this board / BIOS.");
+                if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
+                    return Unavailable("AI-proposed origin layouts require maintainer verification before display.");
                 if (candidate.Resolver != "drfxi-dragonrange-v1")
                     return Unavailable("Origin layout has no trusted resolver: " + candidate.LayoutId);
                 if (Environment.OSVersion.Platform != PlatformID.Win32NT)
@@ -312,6 +314,8 @@ namespace ZenTimings.BiosOrigin
                 var candidate = BiosOriginLayoutCatalog.Select(board, biosVersion);
                 if (candidate == null)
                     return Unavailable("No supported origin layout for board / BIOS in debug report.");
+                if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
+                    return Unavailable("AI-proposed origin layouts are not trusted for offline display.");
                 if (candidate.Resolver != "drfxi-dragonrange-v1")
                     return Unavailable("Origin layout has no trusted offline resolver: " + candidate.LayoutId);
                 var blobs = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);

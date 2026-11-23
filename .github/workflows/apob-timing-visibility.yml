@@ -1,0 +1,35 @@
+name: APOB timing visibility
+
+on:
+  push:
+    branches:
+      - fix/apob-hide-inactive-timing-blocks
+  pull_request:
+    paths:
+      - 'WPF/Windows/ApobInfoWindow.xaml'
+      - 'WPF/Windows/ApobInfoWindow.xaml.cs'
+      - 'WPF/Windows/ApobTimingBlockVisibility.cs'
+      - 'WPF/ZenTimings.csproj'
+      - 'tests/ApobTimingBlockVisibilitySmoke/**'
+      - '.github/workflows/apob-timing-visibility.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  regression-and-build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Run APOB channel visibility regression scenarios
+        shell: pwsh
+        run: dotnet run --project tests/ApobTimingBlockVisibilitySmoke/ApobTimingBlockVisibilitySmoke.csproj --configuration Release
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build complete WPF application
+        shell: pwsh
+        run: msbuild WPF/ZenTimings.sln /restore /p:Configuration=Release '/p:Platform=Any CPU' /verbosity:minimal

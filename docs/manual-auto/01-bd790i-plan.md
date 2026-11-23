@@ -46,13 +46,13 @@ Generated from `setup-questions.json` + `cbs-apcb-map.json` + `aod-apcb-map.json
 | tWRRD | 0x84 / 0x85 | 0x15E / 0x15F |
 | tRDWR | 0x87 / 0x88 | 0x161 / 0x162 |
 
-Section gates: AOD *Active Memory Timing Settings* `0x3C` (1 = Enabled; the Memory Target Speed write is additionally guarded by AOD `0x3A` == 1, an unnamed driver field), CBS *Active Memory Timing Settings* `0x116` (1 = Enabled, 0xFF = Auto). A Manual pair under a disabled gate is **not** applied → origin `Auto`.
+Section gates: AOD *Active Memory Timing Settings* `0x3C` (1 = Enabled; the Memory Target Speed token is written only when hidden AOD `0x3A` != 1 (default 0xFF); `0x3A` == 1 selects a separate, not-yet-decoded profile path), CBS *Active Memory Timing Settings* `0x116` (1 = Enabled, 0xFF = Auto). A Manual pair under a disabled gate is **not** applied → origin `Auto`.
 
 Single-byte enums (0xFF = Auto) and other rows:
 
 | ZenTimings row | AOD | CBS |
 |---|---|---|
-| Speed / MCLK | Memory Target Speed 0x3D (u16, MT/s) | 0x117 |
+| Speed / MCLK | Memory Target Speed 0x3D (u16, MT/s), written when 0x3C == 1 and 0x3A != 1 | 0x117 |
 | FCLK | 0x94 (u16 MHz, 0xFFFF Auto) | 0x260 (option code, 0xFF Auto; 2000 MHz = 48) |
 | UCLK | UCLK DIV1 MODE 0x96 (1 = UCLK=MEMCLK) | — |
 | ProcCaDs, ProcDqDs, ProcOdt, DramDqDs | 0x8A, 0x8B, 0x8C, 0x8D | 0x165, 0x16D, 0x16C, 0x16E |
@@ -103,7 +103,7 @@ Acceptance on the owner's BD790i X3D (1.15):
 - 13 rows `AOD` (tCL 36, tRCD 40, tRP 40, tRAS 64, tRC 104, tWR 48, tRFC 480, tRTP 16, tRRDL 12, tRRDS 8, tFAW 32, tWTRL 24, tWTRS 7), Speed 6000 and FCLK 2000 `AOD`, UCLK `AOD`, MEM VDD/VDDQ/CPU VDDIO `AOD` (1.20 V stored);
 - turnarounds, tRFC2, tRFCsb, ODT/RTT/drive strengths, PowerDown: `Auto`;
 - tCWL, tREFI, GDM, Cmd2T, Nitro: `AGESA`;
-- no `≠` on timings. **Open:** ZenTimings currently shows MEM VDD/VDDQ 1.10 V (from the ACPI AOD region) while 1.20 V is stored — phase 1 must show this as `≠` and the tooltip must say which source each number comes from. Whether 1.20 V reaches the SODIMM PMICs is **UNKNOWN** (read-only check: HWiNFO DIMM PMIC sensors).
+- no `≠` on timings. **Hardware evidence (2026-11-23):** read-only Win32 UEFI read and the origin column worked on DRFXI 1.15; Speed/MCLK were incorrectly Auto because the earlier 0x3A condition was inverted. Corrected in this PR; retest pending. MEM VDD/VDDQ `≠` was confirmed as a real saved-vs-running mismatch: PMIC5100 set-points 1100 mV and ADC about 1095 mV, despite 1200 mV saved in AOD. Reason for the firmware/PMIC difference is still unknown.
 
 ## 8. Work breakdown
 

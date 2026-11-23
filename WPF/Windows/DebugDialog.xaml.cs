@@ -463,17 +463,19 @@ namespace ZenTimings.Windows
             catch (Exception ex) { AddLine("Origin debug failed: " + ex.Message); }
             AddLine();
 
-            // Configured DRAM memory controller settings from BIOS
+            // Legacy AMD_ACPI/APCB table (DDR4/LPDDR4 only), not the DDR5 UEFI setting origins.
             AddHeading("BIOS: Memory Controller Config");
             try
             {
-                for (var i = 0; i < BMC.Table.Length; i++)
-                    AddLine($"Index {i:D3}: {BMC.Table[i]:X2} ({BMC.Table[i]})");
+                bool isDdr4OrLpddr4 = memoryConfig != null &&
+                    (memoryConfig.Type == DRAM.MemType.DDR4 || memoryConfig.Type == DRAM.MemType.LPDDR4);
+                foreach (string line in BiosMemoryControllerDebug.Dump(BMC?.Table, isDdr4OrLpddr4))
+                    AddLine(line);
             }
             catch (Exception ex)
             {
                 AddLine("<FAILED>");
-                AddLine(ex.Message);
+                AddLine(ex.ToString());
             }
 
             // SMU power table

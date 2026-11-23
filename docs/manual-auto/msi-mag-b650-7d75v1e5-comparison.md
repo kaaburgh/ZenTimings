@@ -75,6 +75,7 @@ The MSI `Setup` executable itself changed far more substantially, including reso
 
 ## Versioning decision for PR #5
 
-- `7D75v1E` / `E7D75AMS.1E0` remains the sole supported MSI version in the `derived` catalog entry.
-- `7D75v1E5` / `E7D75AMS.1E5` is **not silently aliased** to the same layout. It requires its own `Setup` size fingerprint (`0x7C2`, not `0x7C4`) before being added, even though the AMD CBS/AOD IFR mappings match.
+- `7D75v1E` / `E7D75AMS.1E0` and `7D75v1E5` / `E7D75AMS.1E5` are **both supported as `derived`**, with one shared IFR layout. Canonical releases `1.E0` and `1.E5` each recognize the corresponding SMBIOS and vendor naming aliases.
+- The catalog stores an independent **release-specific Setup size fingerprint**: `1.E0 → 0x7C4`, `1.E5 → 0x7C2`. AMD CBS and AOD fingerprints are inherited unchanged from the shared entry. The MSI resolver receives the selected release fingerprint rather than assuming a single size.
+- A readout with the wrong Setup size is rejected even when the timing offsets are shared. No BIOS version is silently inferred from the blob.
 - A hardware readout is required before promoting either BIOS to `verified` or trusting the active MSI EXPO/manual configuration path.

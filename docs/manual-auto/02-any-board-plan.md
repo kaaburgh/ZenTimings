@@ -2,6 +2,20 @@
 
 Goal: the origin column on any AMD board ZenTimings supports, without hand-written tables per board, with a deterministic way to know when the answer is not trustworthy, and a cheap path for users to report what failed.
 
+## Implementation checkpoint (2026-11-23, stacked PR #2)
+
+**M2a — implemented as the first Phase 2 slice:**
+
+- Embedded `catalog-v1.json` with explicit board token, BIOS version, variable name/GUID/size, signature/generation headers and version-specific evidence status.
+- A catalog candidate must pass full varstore fingerprint checking **and** the unchanged IFR-derived field plausibility checks before any origin badge can be shown.
+- The same resolution and validation are applied to live firmware reads and offline debug-report replay; unknown board/version, missing/invalid varstores or unknown resolver fail closed.
+- `verified` and `derived` are displayed as distinct evidence tiers. `ai-proposed` is rejected by the runtime without a promotion step; no remote catalog retrieval or automatic opt-in is implemented.
+- Current catalog coverage is intentionally only DRFXI 1.15 (verified once on hardware) and 1.17 (derived from IFR; hardware check pending). **This is not general support for other AMD systems.**
+
+**Not implemented in M2a:** BIOS image import, FV/FFS/IFR extraction, arbitrary firmware semantics, image-hash cache and AGESA runtime matching, diagnostics GitHub issue form, generic APCB flash reader, and AI-assisted CI. The present catalog entry uses board/BIOS selection followed by varstore fingerprints; adding an AGESA field to the key requires a reliable runtime AGESA source. M2b should first build the deterministic offline extractor with fixture-based tests (from the research repo), then wire an explicit user-selected image into the desktop app without auto-downloads.
+
+**Safety boundary:** never interpret unfamiliar offsets or treat an AI-suggested mapping as verified merely because its byte ranges look plausible. The inverted `0x3A` guard found in PR #1 is a concrete example of why the apply-code path matters in addition to IFR extraction.
+
 ## 1. Where a layout comes from (resolution ladder)
 
 ```

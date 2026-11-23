@@ -62,6 +62,53 @@ internal static class Program
         Check(r.Find("BGS").Source == "?", "BGS mapping unknown");
         Check(r.Find("UCLK").Source == "Auto", "UCLK defaults to Auto");
 
+        // Phase 2: select a versioned catalog candidate and validate its live
+        // variable fingerprints independently before running the DRFXI resolver.
+        var catalog115 = BiosOriginLayoutCatalog.Select("DRFXI", "1.15");
+        Check(catalog115 != null && catalog115.LayoutId == "drfxi-dragonrange-v1"
+            && catalog115.Status == "verified", "DRFXI 1.15 verified catalog entry");
+        var catalog117 = BiosOriginLayoutCatalog.Select("DRFXI", "BIOS 1.17");
+        Check(catalog117 != null && catalog117.Status == "derived",
+            "DRFXI 1.17 still only derived, not hardware verified");
+        Check(BiosOriginLayoutCatalog.Select("NotDRFXI", "1.15") == null,
+            "board token never matches a substring");
+        Check(BiosOriginLayoutCatalog.Select("DRFXI", "1.15.9") == null,
+            "version prefix is not enough to match a BIOS release");
+        Check(BiosOriginLayoutCatalog.Select("DRFXI", "1.19") == null,
+            "unsupported firmware never chooses a layout");
+        Check(BiosOriginLayoutCatalog.Select("Other board", "1.15") == null,
+            "unsupported board never chooses a layout");
+        Check(catalog115.Resolver == "drfxi-dragonrange-v1"
+            && catalog115.Variables.Count == 2, "catalog specifies trusted resolver and varstores");
+        Check(catalog115.Variables.All(v => v.Guid.StartsWith("{") && v.Guid.EndsWith("}"))
+            && catalog115.Variables.Any(v => v.Guid.Equals(
+                "{3a997502-647a-4c82-998e-52ef9486a247}", StringComparison.OrdinalIgnoreCase)),
+            "catalog GUIDs are canonical Win32 UEFI API strings with braces");
+        Check(BiosOriginLayoutCatalog.MayDisplayOrigins("verified")
+            && BiosOriginLayoutCatalog.MayDisplayOrigins("derived"),
+            "only deterministic catalog evidence tiers are eligible for display");
+        Check(!BiosOriginLayoutCatalog.MayDisplayOrigins("ai-proposed")
+            && !BiosOriginLayoutCatalog.MayDisplayOrigins(null),
+            "AI-proposed or unknown catalog evidence never silently enables badges");
+        var fingerprintBlobs = new System.Collections.Generic.Dictionary<string, byte[]>(
+            StringComparer.OrdinalIgnoreCase) { { "AmdSetupRPL", cbs }, { "AodSetupRpl", aod } };
+        Check(catalog115.CheckFingerprint(fingerprintBlobs) == null,
+            "correct variable sizes and CBS header pass catalog fingerprint");
+        byte[] brokenAmd = (byte[])cbs.Clone();
+        brokenAmd[8] ^= 0x01;
+        fingerprintBlobs["AmdSetupRPL"] = brokenAmd;
+        Check(catalog115.CheckFingerprint(fingerprintBlobs)?.Contains("0x8") == true,
+            "changed generation rejects catalog fingerprint");
+        fingerprintBlobs["AmdSetupRPL"] = new byte[20];
+        Check(catalog115.CheckFingerprint(fingerprintBlobs)?.Contains("size") == true,
+            "incorrect varstore size rejects catalog fingerprint");
+        fingerprintBlobs["AmdSetupRPL"] = cbs;
+        fingerprintBlobs.Remove("AodSetupRpl");
+        Check(catalog115.CheckFingerprint(fingerprintBlobs)?.Contains("missing") == true,
+            "missing varstore rejects catalog fingerprint");
+        fingerprintBlobs["AmdSetupRPL"] = cbs;
+        fingerprintBlobs["AodSetupRpl"] = aod;
+
         // Synthesized full 1.15 owner configuration, documented in the AFU /O readback.
         // Not a raw NVRAM fixture: those bytes were not committed to the research repository.
         aod[0x3C] = 1;
@@ -231,6 +278,27 @@ internal static class Program
         Console.WriteLine("Offline replay: " + replay.Status);
         Check(replay.IsMatched,
             "offline debug report reproduces origin data");
+        Check(replay.Status.Contains("catalog status=verified"),
+            "offline replay discloses catalog evidence tier");
+        Check(replay.Find("Speed").Details.Contains("Layout catalog:")
+            && replay.Find("Speed").Details.Contains("Verified against"),
+            "origin tooltip discloses verified catalog provenance");
+        var unverifiedReplay = DrfxiSettingOrigins.FromDebugReport("DRFXI", "1.17", text);
+        Check(unverifiedReplay.IsMatched && unverifiedReplay.Status.Contains("catalog status=derived"),
+            "BIOS 1.17 retains derived evidence status until hardware validation");
+        Check(unverifiedReplay.Find("Speed").Details.Contains("no hardware readout verified"),
+            "derived origin tooltip never claims physical verification");
+        Check(!DrfxiSettingOrigins.FromDebugReport("NOTDRFXI", "1.15", text).IsMatched,
+            "offline report cannot bypass board catalog gate");
+        Check(!DrfxiSettingOrigins.FromDebugReport("DRFXI", "1.19", text).IsMatched,
+            "offline report cannot bypass firmware version gate");
+        byte[] invalidHeader = (byte[])savedCbs.Clone();
+        invalidHeader[8] ^= 1;
+        string invalidReport = "AmdSetupRPL.base64: " + Convert.ToBase64String(invalidHeader) + "\n"
+            + "AodSetupRpl.base64: " + Convert.ToBase64String(savedAod) + "\n";
+        var wrongFingerprint = DrfxiSettingOrigins.FromDebugReport("DRFXI", "1.15", invalidReport);
+        Check(!wrongFingerprint.IsMatched && wrongFingerprint.Plausibility.StartsWith("failed:"),
+            "offline report never accepts mismatched catalog fingerprint");
 
         // The DDR5 debug report previously dereferenced BMC.Table even though BMC was null.
         Check(BiosMemoryControllerDebug.Dump(null, false).Single().StartsWith("Not applicable:"),

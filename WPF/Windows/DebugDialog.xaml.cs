@@ -449,13 +449,24 @@ namespace ZenTimings.Windows
                             + (entry.Stored != null ? " (saved " + entry.Stored + ")" : ""));
                 if (includeBiosSetupVariables)
                 {
-                    if (origins.AmdSetup != null && origins.AodSetup != null)
+                    bool wroteVariable = false;
+                    if (origins.AmdSetup != null)
                     {
                         AddLine("AmdSetupRPL.base64: " + Convert.ToBase64String(origins.AmdSetup));
-                        AddLine("AodSetupRpl.base64: " + Convert.ToBase64String(origins.AodSetup));
+                        wroteVariable = true;
                     }
-                    else
-                        AddLine("BIOS setup variable blobs were requested but could not be read.");
+                    if (origins.AodSetup != null)
+                    {
+                        AddLine("AodSetupRpl.base64: " + Convert.ToBase64String(origins.AodSetup));
+                        wroteVariable = true;
+                    }
+                    if (origins.Setup != null)
+                    {
+                        AddLine("Setup.base64: " + Convert.ToBase64String(origins.Setup));
+                        wroteVariable = true;
+                    }
+                    if (!wroteVariable)
+                        AddLine("BIOS setup variable blobs were requested but none could be read.");
                 }
                 else
                     AddLine("BIOS setup variable blobs omitted (checkbox not selected).");

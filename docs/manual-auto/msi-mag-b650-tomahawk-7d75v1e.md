@@ -69,6 +69,8 @@ Fail-closed rules:
 - If MSI A-XMP/EXPO selectors are non-zero and no explicit AMD CBS/AOD Manual control is found, the timing source is reported as unknown. Raw selector values are included in the tooltip for hardware validation.
 - No firmware writes, BIOS flashing, flash reads, or network access are performed by the application.
 
+This first resolver maps the timing controls and CBS Memory Target Speed only. FCLK/UCLK, voltages, Power Down, drive strengths, and the effective MSI profile-application path remain unmapped; their rows intentionally receive no inferred origin badge.
+
 ## Hardware validation still required
 
 On a real MS-7D75 board running this BIOS:

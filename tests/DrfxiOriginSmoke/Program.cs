@@ -50,6 +50,100 @@ internal static class Program
         aod[0x97] = 0;
     }
 
+    private static void RunMsiMagB650Tests()
+    {
+        var catalog = BiosOriginLayoutCatalog.Select(
+            "MAG B650 TOMAHAWK WIFI (MS-7D75)", "1.E0");
+        Check(catalog != null && catalog.LayoutId == "msi-mag-b650-tomahawk-7d75v1e"
+            && catalog.Resolver == "msi-mag-b650-raphael-v1e" && catalog.Status == "derived",
+            "MSI 7D75v1E selects its derived family-specific layout");
+        Check(catalog.Variables.Count == 3
+            && catalog.Variables.Single(v => v.Name == "AmdSetupRPL").Optional == false
+            && catalog.Variables.Single(v => v.Name == "AodSetupRpl").Optional
+            && catalog.Variables.Single(v => v.Name == "Setup").Optional,
+            "MSI CBS is required while AOD and Setup are optional read-only diagnostics");
+
+        byte[] amd = new byte[0x779];
+        byte[] aod = new byte[0x320];
+        byte[] setup = new byte[0x7C4];
+        amd[0x116] = 255;
+        aod[0x3C] = 255;
+        for (int i = 0x3F; i <= 0x87; i += 3) aod[i] = 0;
+        for (int i = 0x119; i <= 0x161; i += 3) amd[i] = 0;
+
+        var blobs = new System.Collections.Generic.Dictionary<string, byte[]>(
+            StringComparer.OrdinalIgnoreCase)
+        {
+            { "AmdSetupRPL", amd }
+        };
+        Check(catalog.CheckFingerprint(blobs) == null,
+            "MSI fingerprint accepts missing optional AOD and Setup variables");
+        blobs["AodSetupRpl"] = aod;
+        blobs["Setup"] = setup;
+        Check(catalog.CheckFingerprint(blobs) == null,
+            "MSI fingerprint accepts exact IFR varstore sizes");
+
+        var report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        Check(report.IsMatched && report.LayoutId == "msi-mag-b650-tomahawk-7d75v1e",
+            "MSI default synthetic variables pass IFR plausibility");
+        Check(report.Find("tCL").Source == "Auto" && report.Find("Speed").Source == "Auto",
+            "MSI default CBS/AOD/Setup selectors classify as Auto");
+
+        amd[0x116] = 1;
+        amd[0x119] = 1;
+        Set16(amd, 0x11A, 30);
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        Check(report.Find("tCL").Source == "CBS" && report.Find("tCL").StoredNumber == 30,
+            "MSI CBS tCL IFR offsets and value are decoded");
+
+        amd[0x119] = 0;
+        aod[0x3C] = 1;
+        aod[0x3F] = 1;
+        Set16(aod, 0x40, 30);
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        Check(report.Find("tCL").Source == "AOD" && report.Find("tCL").StoredNumber == 30,
+            "MSI AOD tCL IFR offsets and value are decoded");
+
+        amd[0x119] = 1;
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        Check(report.Find("tCL").Source == "?",
+            "MSI does not invent AOD-over-CBS precedence when both menus are Manual");
+
+        amd[0x116] = 255;
+        amd[0x119] = 0;
+        aod[0x3C] = 255;
+        aod[0x3F] = 0;
+        setup[0x596] = 1;
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        Check(report.Find("tCL").Source == "?"
+            && report.Find("tCL").Details.Contains("EXPO")
+            && report.Find("tCL").Details.Contains("0x596=1"),
+            "MSI EXPO selector is disclosed as raw diagnostic, not falsely mapped to timing source");
+
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, null, null);
+        Check(report.IsMatched && report.Find("tCL").Source == "?"
+            && report.Find("tCL").Details.Contains("not runtime-readable"),
+            "missing optional MSI AOD/Setup variables fail closed for Auto classification");
+
+        Check(!MsiMagB650SettingOrigins.FromBlobs(new byte[20], null, null).IsMatched,
+            "MSI resolver rejects incorrect CBS varstore size");
+        byte[] badGate = (byte[])amd.Clone();
+        badGate[0x116] = 254;
+        Check(!MsiMagB650SettingOrigins.FromBlobs(badGate, null, null).IsMatched,
+            "MSI resolver rejects an undefined CBS timing gate");
+        byte[] badSetup = new byte[0x7C4];
+        badSetup[0x596] = 4;
+        Check(!MsiMagB650SettingOrigins.FromBlobs(amd, null, badSetup).IsMatched,
+            "MSI resolver rejects an EXPO selector outside IFR options");
+
+        string debug = "AmdSetupRPL.base64: " + Convert.ToBase64String(amd) + "\n";
+        var replay = DrfxiSettingOrigins.FromDebugReport(
+            "MAG B650 TOMAHAWK WIFI (MS-7D75)", "1.E0", debug);
+        Check(replay.IsMatched && replay.LayoutId == "msi-mag-b650-tomahawk-7d75v1e"
+            && replay.Find("Speed").Source == "?",
+            "MSI offline replay tolerates absent optional variables but remains fail-closed");
+    }
+
     private static void Main()
     {
         byte[] cbs, aod;
@@ -313,6 +407,8 @@ internal static class Program
                 .SequenceEqual(new[] { "Index 000: 00 (0)", "Index 001: 7F (127)", "Index 002: FF (255)" }),
             "loaded DDR4 APCB bytes preserve the original dump format");
 
-        Console.WriteLine("OK: " + tests + " DRFXI setting-origin and BIOS debug assertions");
+        RunMsiMagB650Tests();
+
+        Console.WriteLine("OK: " + tests + " BIOS setting-origin and BIOS debug assertions");
     }
 }

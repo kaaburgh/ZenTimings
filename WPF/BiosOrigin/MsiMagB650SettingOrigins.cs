@@ -28,7 +28,10 @@ namespace ZenTimings.BiosOrigin
                         LayoutId = layout.Id,
                         IsMatched = false,
                         Plausibility = "failed: " + reason,
-                        Status = "MSI 7D75v1E layout rejected: " + reason
+                        Status = "MSI 7D75v1E layout rejected: " + reason,
+                        AmdSetup = amd == null ? null : (byte[])amd.Clone(),
+                        AodSetup = aod == null ? null : (byte[])aod.Clone(),
+                        Setup = setup == null ? null : (byte[])setup.Clone()
                     };
 
                 bool aodAvailable = aod != null;

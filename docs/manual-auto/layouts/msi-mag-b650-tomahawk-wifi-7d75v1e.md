@@ -77,7 +77,7 @@ AodDxe declares both AOD formsets, each with a `0x320`-byte varstore. The offset
 | FCLK | `0x94` (16-bit) | `0x92` (16-bit) |
 | UCLK DIV1 MODE | `0x96` | `0x94` |
 
-The complete timing maps are recorded in the JSON. AodSmm contains the strings `AodSetupRpl` and `AodSetupPhx`, but neither variable appears in the extracted StdDefaults NVAR list. Therefore the image proves the formset layout and code references, not that a fresh installation has a readable runtime AOD variable.
+The complete timing maps are recorded in the JSON. In the RPL formset, byte `0x3A` is not an IFR question; its apply-time meaning is unresolved. Do not copy the DRFXI AOD `0x3A` guard interpretation into this BIOS without tracing this image's AodSmm. In the PHX formset, `0x3A` is instead the visible Active Memory Timing Settings control. AodSmm contains the strings `AodSetupRpl` and `AodSetupPhx`, but neither variable appears in the extracted StdDefaults NVAR list. Therefore the image proves the formset layout and code references, not that a fresh installation has a readable runtime AOD variable.
 
 ## Why this remains ai-proposed
 

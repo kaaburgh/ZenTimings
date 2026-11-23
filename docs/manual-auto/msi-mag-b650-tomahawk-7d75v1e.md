@@ -2,7 +2,7 @@
 
 ## Evidence and firmware identity
 
-For a byte-level and IFR comparison against the preceding `7D75v1E5` build (2024-01-25), see [1E5 → 1E0 comparison](msi-mag-b650-7d75v1e5-comparison.md). AMD CBS/AOD IFR matches exactly, but MSI `Setup` size differs (`0x7C2` vs `0x7C4`), so the older release needs a separate fingerprint.
+For a byte-level and IFR comparison against the preceding `7D75v1E5` build (2024-01-25), see [1E5 → 1E0 comparison](msi-mag-b650-7d75v1e5-comparison.md). AMD CBS/AOD IFR matches exactly, but MSI `Setup` size differs (`0x7C2` vs `0x7C4`). Both are now registered using the same offsets and distinct per-release fingerprints.
 
 
 Source supplied for this analysis: MSI BIOS archive `7D75v1E.zip`.
@@ -14,7 +14,7 @@ Source supplied for this analysis: MSI BIOS archive `7D75v1E.zip`.
 - Release notes: AMI BIOS; AGESA ComboPI 1.1.0.2b update; Ryzen 8000 STAPM fix.
 - The image contains the build string `E7D75AMS.1E0 02/20/2024`.
 
-The catalog registers the running BIOS identifiers `1.E0`, `E7D75AMS.1E0`, and the marketing alias `7D75v1E`. Hardware SMBIOS output is still needed to confirm which identifier Windows exposes on this board.
+The catalog recognizes both `1.E0` (aliases `E7D75AMS.1E0` and `7D75v1E`) and `1.E5` (aliases `E7D75AMS.1E5` and `7D75v1E5`) as `derived` releases of **one shared MSI layout**. Their AMD memory fields use identical IFR offsets; the selected release supplies its own Setup-size fingerprint. Hardware SMBIOS output is still needed to confirm the exact running version.
 
 ## UEFI / IFR extraction
 
@@ -24,7 +24,7 @@ The image was parsed offline with the project UEFI toolchain. The following IFR 
 |---|---|---:|---|
 | `AmdSetupRPL` | `3A997502-647A-4C82-998E-52EF9486A247` | `0x779` (1913) | AMD CBS Raphael/RPL settings |
 | `AodSetupRpl` | `5ED15DC0-EDEF-4161-9151-6014C4CC630C` | `0x320` (800) | AMD Overclocking / AOD settings |
-| `Setup` | `EC87D643-EBA4-4BB5-A1E5-3F3E36B20DA9` | `0x7C4` (1988) | MSI setup, OC menu and profile selectors |
+| `Setup` | `EC87D643-EBA4-4BB5-A1E5-3F3E36B20DA9` | `0x7C2` (1E5) / `0x7C4` (1E0) | MSI setup, OC menu and profile selectors |
 
 Important distinction: the external `StdDefaults` NVRAM block contains defaults for `AmdSetupRPL` and `Setup`, but no `AodSetupRpl` default entry. The AOD driver nevertheless declares the `AodSetupRpl` varstore in IFR. This does not prove that the runtime variable is absent; its availability must be checked on the physical board. `Setup` is also optional until runtime read access is confirmed. Accordingly, missing AOD or Setup data does not get interpreted as Auto.
 
@@ -68,7 +68,7 @@ Evidence status: `derived` — extracted deterministically from the supplied BIO
 Fail-closed rules:
 
 - `AmdSetupRPL` must be readable and have exactly `0x779` bytes.
-- `AodSetupRpl`, if readable, must have exactly `0x320` bytes; `Setup`, if readable, must have exactly `0x7C4` bytes.
+- `AodSetupRpl`, if readable, must have exactly `0x320` bytes; `Setup`, if readable, must match the **selected BIOS version**: `0x7C2` for 1E5 or `0x7C4` for 1E0.
 - Missing AOD or Setup data is not treated as Auto.
 - If both AMD CBS and AOD expose a Manual timing, the resolver reports unknown. AOD-over-CBS precedence is not assumed for this MSI BIOS.
 - If MSI A-XMP/EXPO / Memory Try It! selectors are non-zero and no explicit AMD CBS/AOD Manual control is found, the timing source is reported as unknown. All raw selector values are included in the tooltip for hardware validation.

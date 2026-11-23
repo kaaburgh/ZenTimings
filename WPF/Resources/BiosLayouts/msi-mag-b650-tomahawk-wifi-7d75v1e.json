@@ -117,7 +117,69 @@
   ],
   "msiOc": {
     "variable": "Setup",
-    "raphaelPath": {
+    "alternatePath": {
+      "selector": "MsiOcInfoFlag.QuestionId 0x2C8 in [3,4] (plus QuestionId 0x2C9 == 1 conditions)",
+      "fields": [
+        {
+          "name": "A-XMP",
+          "offset": "0x6F9",
+          "width": 8
+        },
+        {
+          "name": "EXPO",
+          "offset": "0x6FA",
+          "width": 8
+        },
+        {
+          "name": "DRAM Frequency",
+          "offset": "0x68C",
+          "width": 16,
+          "units": "MT/s",
+          "auto": 65535
+        },
+        {
+          "name": "FCLK Frequency",
+          "offset": "0x686",
+          "width": 16,
+          "units": "MHz",
+          "auto": 65535
+        },
+        {
+          "name": "UCLK DIV1 MODE",
+          "offset": "0x688",
+          "width": 8,
+          "options": {
+            "0": "UCLK=MEMCLK/2",
+            "1": "UCLK=MEMCLK",
+            "255": "Auto"
+          }
+        },
+        {
+          "name": "Memory Context Restore",
+          "offset": "0x6F8",
+          "width": 8,
+          "auto": 255
+        },
+        {
+          "name": "Memory Try It!",
+          "offset": "0x6FB",
+          "width": 16
+        }
+      ]
+    },
+    "ignoredLegacyFields": [
+      {
+        "name": "A-XMP",
+        "offset": "0x73",
+        "note": "under unconditional SuppressIf True; do not treat as active selector"
+      },
+      {
+        "name": "AMD EXPO",
+        "offset": "0x74",
+        "note": "under unconditional SuppressIf True; do not treat as active selector"
+      }
+    ],
+    "rplCandidatePath": {
       "selector": "MsiOcInfoFlag.QuestionId 0x2C8 == 2 (plus QuestionId 0x2C9 == 1 conditions)",
       "fields": [
         {
@@ -180,69 +242,7 @@
           "width": 16
         }
       ]
-    },
-    "alternatePath": {
-      "selector": "MsiOcInfoFlag.QuestionId 0x2C8 in [3,4] (plus QuestionId 0x2C9 == 1 conditions)",
-      "fields": [
-        {
-          "name": "A-XMP",
-          "offset": "0x6F9",
-          "width": 8
-        },
-        {
-          "name": "EXPO",
-          "offset": "0x6FA",
-          "width": 8
-        },
-        {
-          "name": "DRAM Frequency",
-          "offset": "0x68C",
-          "width": 16,
-          "units": "MT/s",
-          "auto": 65535
-        },
-        {
-          "name": "FCLK Frequency",
-          "offset": "0x686",
-          "width": 16,
-          "units": "MHz",
-          "auto": 65535
-        },
-        {
-          "name": "UCLK DIV1 MODE",
-          "offset": "0x688",
-          "width": 8,
-          "options": {
-            "0": "UCLK=MEMCLK/2",
-            "1": "UCLK=MEMCLK",
-            "255": "Auto"
-          }
-        },
-        {
-          "name": "Memory Context Restore",
-          "offset": "0x6F8",
-          "width": 8,
-          "auto": 255
-        },
-        {
-          "name": "Memory Try It!",
-          "offset": "0x6FB",
-          "width": 16
-        }
-      ]
-    },
-    "ignoredLegacyFields": [
-      {
-        "name": "A-XMP",
-        "offset": "0x73",
-        "note": "under unconditional SuppressIf True; do not treat as active selector"
-      },
-      {
-        "name": "AMD EXPO",
-        "offset": "0x74",
-        "note": "under unconditional SuppressIf True; do not treat as active selector"
-      }
-    ]
+    }
   },
   "amdCbs": {
     "raphael": {
@@ -915,7 +915,7 @@
   "factoryDefaults": {
     "source": "StdDefaults NVAR image data, not a live machine readout",
     "setup": {
-      "raphaelPath": {
+      "alternatePath": {
         "aXmp": 0,
         "expo": 0,
         "dramFrequency": 65535,
@@ -924,7 +924,7 @@
         "memoryContextRestore": 255,
         "memoryTryIt": 0
       },
-      "alternatePath": {
+      "rplCandidatePath": {
         "aXmp": 0,
         "expo": 0,
         "dramFrequency": 65535,

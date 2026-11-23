@@ -149,8 +149,9 @@ internal static class Program
             "MSI resolver rejects an undefined CBS timing gate");
         byte[] badSetup = new byte[0x7C4];
         badSetup[0x596] = 4;
-        Check(!MsiMagB650SettingOrigins.FromBlobs(amd, null, badSetup).IsMatched,
-            "MSI resolver rejects an EXPO selector outside IFR options");
+        var badSetupReport = MsiMagB650SettingOrigins.FromBlobs(amd, null, badSetup);
+        Check(!badSetupReport.IsMatched && badSetupReport.Setup.Length == 0x7C4,
+            "MSI resolver rejects invalid EXPO selector but retains raw blob for opt-in diagnostics");
 
         string debug = "AmdSetupRPL.base64: " + Convert.ToBase64String(amd) + "\n";
         var replay = DrfxiSettingOrigins.FromDebugReport(

@@ -62,6 +62,7 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Numerics" />
     <Reference Include="System.Security" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.ServiceProcess" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
@@ -104,6 +105,8 @@
       <Link>Common\UpdaterPersistenceProvider.cs</Link>
     </Compile>
     <Compile Include="Converters\CountToVisibilityConverter.cs" />
+    <Compile Include="BiosOrigin\DrfxiSettingOrigins.cs" />
+    <Compile Include="Windows\BiosMemoryControllerDebug.cs" />
     <Compile Include="Export\CoreOptionsScope.cs" />
     <Compile Include="Export\SnapshotHtmlWriter.cs" />
     <Compile Include="Helpers\AgesaHelper.cs" />
@@ -537,6 +540,9 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources\PawnIO\PawnIO_setup.exe" />
+    <EmbeddedResource Include="Resources\BiosLayouts\drfxi-dragonrange-v1.json">
+      <LogicalName>ZenTimings.Resources.BiosLayouts.drfxi-dragonrange-v1.json</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ZenStates-Core\ZenStates-Core.csproj">
@@ -568,6 +574,20 @@
     <ItemGroup>
       <Compile Include="$(BuildNumberFile)" />
       <FileWrites Include="$(BuildNumberFile)" />
+    </ItemGroup>
+  </Target>
+  <!-- Custom builds: msbuild /p:ZenTimingsUpdateCheck=disabled (or the environment variable of the same name)
+       embeds an assembly marker that turns the built-in update check off. Builds without the property,
+       including the official releases, are unchanged. -->
+  <Target Name="EmbedUpdateCheckMarker" BeforeTargets="PrepareForBuild" Condition="'$(ZenTimingsUpdateCheck)' == 'disabled'">
+    <PropertyGroup>
+      <UpdateCheckMarkerFile>$(IntermediateOutputPath)UpdateCheckMarker.g.cs</UpdateCheckMarkerFile>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(UpdateCheckMarkerFile)" Overwrite="true" WriteOnlyWhenDifferent="true" Lines="// Generated for a custom build without the built-in update check.;[assembly: System.Reflection.AssemblyMetadata(&quot;ZenTimings.UpdateCheck&quot;, &quot;disabled&quot;)]" />
+    <ItemGroup>
+      <Compile Include="$(UpdateCheckMarkerFile)" />
+      <FileWrites Include="$(UpdateCheckMarkerFile)" />
     </ItemGroup>
   </Target>
   <Target Name="DownloadPawnIOSetup" BeforeTargets="PrepareForBuild" Condition="!Exists('Resources\PawnIO\PawnIO_setup.exe')">

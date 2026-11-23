@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ZenTimings.Common;
+using ZenTimings.BiosOrigin;
 using ZenTimings.Plugin;
 
 namespace ZenTimings.Export
@@ -51,6 +52,11 @@ namespace ZenTimings.Export
     public sealed class SnapshotSource
     {
         public BiosMemController.Resistances? BiosMemConfig { get; set; }
+
+        public SettingOriginReport SettingOrigins { get; set; }
+
+        // Captured alongside the snapshot: UI voltage readings may be from PMIC or the AOD region.
+        public Dictionary<string, string> SettingOriginRunningVoltages { get; set; }
 
         public List<AsusSensorInfo> AsusSensors { get; set; }
 

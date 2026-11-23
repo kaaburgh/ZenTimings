@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Globalization;
 using System.Linq;
 using System.Management;
 using System.Reflection;
@@ -25,6 +26,7 @@ using ZenStates.Core.Hardware.Mock;
 using ZenStates.Core.OHWM;
 using ZenTimings.Common;
 using ZenTimings.Controls;
+using ZenTimings.BiosOrigin;
 using ZenTimings.Export;
 using ZenTimings.Helpers;
 using ZenTimings.Plugin;
@@ -234,7 +236,7 @@ namespace ZenTimings
                     SplashWindow.Loading("IO Driver");
                     if (!WaitForInpoutDriverLoad())
                     {
-                        HandleError("I/O driver is not responding or not loaded.");
+                        HandleError(DescribeLegacyIoFailure());
                     }
 
                     SplashWindow.Loading("Plugins");
@@ -267,6 +269,11 @@ namespace ZenTimings
                     GetAgesaVersion(),
                     ModulePmicData(0)
                 );
+
+                // Read the two UEFI setup variables only for the supported DRFXI BIOS versions.
+                // An unsupported layout / failed read is non-fatal and cannot produce misleading Manual badges.
+                mainViewModel.SettingOrigins = DrfxiSettingOrigins.ReadFromFirmware(
+                    cpu.systemInfo?.MbName, cpu.systemInfo?.BiosVersion);
 
                 DataContext = mainViewModel;
 
@@ -1008,6 +1015,30 @@ namespace ZenTimings
 
             var index = timings.FindIndex(m => m.Key.Equals(offset));
             return timings[index < 0 ? 0 : index].Value;
+        }
+
+        /// <summary>
+        /// PawnIO's SMU/SMN and SMBus reads can succeed even when the separate legacy
+        /// InpOut native DLL is missing or its kernel driver is blocked. AOD/APOB
+        /// physical-memory reads still depend on that component in this core revision.
+        /// </summary>
+        private string DescribeLegacyIoFailure()
+        {
+            string nativeName = Environment.Is64BitProcess ? "inpoutx64.dll" : "WinIo32.dll";
+            string nativePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, nativeName);
+            if (!File.Exists(nativePath))
+                return "Native I/O dependency " + nativeName + " is missing from the ZenTimings folder."
+                    + "\nAPOB and AOD readings are unavailable."
+                    + "\nExtract the complete portable ZIP; do not run ZenTimings.exe by itself.";
+
+            if (cpu?.io == null)
+                return "Native I/O library " + nativeName + " is present but could not be initialized."
+                    + "\nAPOB and AOD readings are unavailable."
+                    + "\nWindows may block legacy InpOut drivers. Do not disable Windows driver protection to use ZenTimings.";
+
+            return "Native I/O library " + nativeName + " loaded but its kernel driver did not respond."
+                + "\nAPOB and AOD readings are unavailable."
+                + "\nCheck Windows driver and Code Integrity events; do not disable Windows security protections.";
         }
 
         private bool WaitForInpoutDriverLoad()
@@ -1847,6 +1878,13 @@ namespace ZenTimings
             mainViewModel.RefreshUclkLabel();
         }
 
+        private void ShowSettingOriginMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            // The checked state is already written to AppSettings by the TwoWay binding.
+            // TimingRow observes PropertyChanged and immediately updates its badge visibility.
+            settings.Save();
+        }
+
         private void SpdInfoToolstripMenuItem_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -2077,6 +2115,15 @@ namespace ZenTimings
             return new SnapshotSource
             {
                 BiosMemConfig = BMC?.Config,
+                SettingOrigins = mainViewModel?.SettingOrigins,
+                SettingOriginRunningVoltages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    { "MEM VDD", mainViewModel?.SwaAdcV > 0 ? mainViewModel.SwaAdcV.ToString("F4", CultureInfo.InvariantCulture) : null },
+                    { "MEM VDDQ", mainViewModel?.SwbAdcV > 0 ? mainViewModel.SwbAdcV.ToString("F4", CultureInfo.InvariantCulture) : null },
+                    { "CPU VDDIO", mainViewModel?.ApuVddio > 0 ? mainViewModel.ApuVddio.ToString("F4", CultureInfo.InvariantCulture) : null },
+                    { "MEM VPP", mainViewModel?.VppAdcV > 0 ? mainViewModel.VppAdcV.ToString("F4", CultureInfo.InvariantCulture) : null },
+                    { "VDD MISC", mainViewModel?.Vmisc > 0 ? mainViewModel.Vmisc.ToString("F4", CultureInfo.InvariantCulture) : null }
+                },
                 AsusSensors = AsusWmi?.sensors,
                 Plugins = plugins,
                 LastRefreshUtc = lastRefreshUtc,
@@ -2231,6 +2278,9 @@ namespace ZenTimings
                     mockData.PmicData,
                     mockData
                 );
+                // Never consult the live host while displaying an offline debug report.
+                viewModel.SettingOrigins = DrfxiSettingOrigins.FromDebugReport(
+                    mockData.MbName, mockData.BiosVersion, debugReportText);
 
                 MainWindow mockWindow = new MainWindow(viewModel, mockData)
                 {

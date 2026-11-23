@@ -12,6 +12,7 @@ using ZenStates.Core.Common;
 using ZenStates.Core.Hardware;
 using ZenStates.Core.Hardware.DRAM.DDR5.Spd;
 using ZenTimings.Common;
+using ZenTimings.BiosOrigin;
 using ZenTimings.Export;
 using ZenTimings.Helpers;
 using Application = System.Windows.Application;
@@ -38,6 +39,7 @@ namespace ZenTimings.Windows
         private readonly string wmiScope = "root\\wmi";
         private string instanceName;
         private readonly StringBuilder result = new StringBuilder();
+        private bool includeBiosSetupVariables;
 
         public DebugDialog(BiosMemController biosMemCtrl, AsusWMI asusWmi)
         {
@@ -57,6 +59,7 @@ namespace ZenTimings.Windows
             buttonDebug.IsEnabled = enabled;
             textBoxDebugOutput.IsEnabled = enabled;
             CheckPrintSerials.IsEnabled = enabled;
+            CheckIncludeBiosVars.IsEnabled = enabled;
         }
 
         private string GetWmiInstanceName()
@@ -430,17 +433,49 @@ namespace ZenTimings.Windows
             AddLine();
             AddReport(() => cpu.info.aod?.GetReport() ?? "AOD: not available");
 
-            // Configured DRAM memory controller settings from BIOS
+            // Reader performs no firmware writes and reports the exact fail-closed reason.
+            // Blobs are not exported unless the user checked the dedicated box before generation.
+            AddHeading("BIOS: Setting Origins");
+            try
+            {
+                SettingOriginReport origins = DrfxiSettingOrigins.ReadFromFirmware(
+                    cpu.systemInfo?.MbName, cpu.systemInfo?.BiosVersion);
+                AddLine("Layout: " + (origins.LayoutId ?? "unknown"));
+                AddLine("Plausibility: " + origins.Plausibility);
+                AddLine("Status: " + origins.Status);
+                if (origins.IsMatched)
+                    foreach (var entry in origins.Rows.Values)
+                        AddLine(entry.Row + ": " + entry.Source
+                            + (entry.Stored != null ? " (saved " + entry.Stored + ")" : ""));
+                if (includeBiosSetupVariables)
+                {
+                    if (origins.AmdSetup != null && origins.AodSetup != null)
+                    {
+                        AddLine("AmdSetupRPL.base64: " + Convert.ToBase64String(origins.AmdSetup));
+                        AddLine("AodSetupRpl.base64: " + Convert.ToBase64String(origins.AodSetup));
+                    }
+                    else
+                        AddLine("BIOS setup variable blobs were requested but could not be read.");
+                }
+                else
+                    AddLine("BIOS setup variable blobs omitted (checkbox not selected).");
+            }
+            catch (Exception ex) { AddLine("Origin debug failed: " + ex.Message); }
+            AddLine();
+
+            // Legacy AMD_ACPI/APCB table (DDR4/LPDDR4 only), not the DDR5 UEFI setting origins.
             AddHeading("BIOS: Memory Controller Config");
             try
             {
-                for (var i = 0; i < BMC.Table.Length; i++)
-                    AddLine($"Index {i:D3}: {BMC.Table[i]:X2} ({BMC.Table[i]})");
+                bool isDdr4OrLpddr4 = memoryConfig != null &&
+                    (memoryConfig.Type == DRAM.MemType.DDR4 || memoryConfig.Type == DRAM.MemType.LPDDR4);
+                foreach (string line in BiosMemoryControllerDebug.Dump(BMC?.Table, isDdr4OrLpddr4))
+                    AddLine(line);
             }
             catch (Exception ex)
             {
                 AddLine("<FAILED>");
-                AddLine(ex.Message);
+                AddLine(ex.ToString());
             }
 
             // SMU power table
@@ -670,6 +705,7 @@ namespace ZenTimings.Windows
         private async void ButtonDebug_Click(object sender, RoutedEventArgs e)
         {
             bool printSerialNumbers = CheckPrintSerials.IsChecked == true;
+            includeBiosSetupVariables = CheckIncludeBiosVars.IsChecked == true;
 
             try
             {

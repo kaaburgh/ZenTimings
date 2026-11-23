@@ -45,6 +45,7 @@ namespace ZenTimings.Windows
 
 
             InitializeComponent();
+            CheckUpdateBtn.Visibility = Updater.IsAvailable ? Visibility.Visible : Visibility.Collapsed;
 
             //this.Title = string.Format("About {0}", AssemblyTitle);
             this.labelProductName.Content = AssemblyProduct;

@@ -92,6 +92,13 @@
                                 <MenuItem Header="Save a debug report" Click="DebugToolstripItem_Click" />
                             </MenuItem>
                         </MenuItem>
+                        <MenuItem Header="_View">
+                            <MenuItem Header="Show setting origin"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding Settings.ShowSettingOrigin, Mode=TwoWay}"
+                                      Click="ShowSettingOriginMenuItem_Click"
+                                      ToolTip="Show Auto / AMD CBS / AMD Overclocking sources on a verified DRFXI BIOS." />
+                        </MenuItem>
                         <MenuItem Header="_Help">
                             <MenuItem Header="_About" Click="AboutToolStripMenuItem_Click" />
                             <MenuItem Header="Changelog" Click="MenuItem_Click_5" />

@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -52,8 +53,18 @@ namespace ZenTimings
 
         private static AppSettings.ReleaseChannel Channel => AppSettings.Instance.UpdateReleaseChannel;
 
+        // A custom build (msbuild /p:ZenTimingsUpdateCheck=disabled) embeds
+        // [assembly: AssemblyMetadata("ZenTimings.UpdateCheck", "disabled")] and never checks for or offers updates.
+        // Builds without that property, including the official releases, are unaffected.
+        public static bool IsAvailable { get; } = !Attribute.GetCustomAttributes(
+                Assembly.GetExecutingAssembly(), typeof(AssemblyMetadataAttribute), false)
+            .OfType<AssemblyMetadataAttribute>()
+            .Any(a => a.Key == "ZenTimings.UpdateCheck" && a.Value == "disabled");
+
         public void CheckForUpdate(bool manualUpdate = false, bool suppressNetworkErrorDialog = false)
         {
+            if (!IsAvailable) return;
+
             if (!manualUpdate) SplashWindow.Loading("Checking for updates...");
 
             manual = manualUpdate;

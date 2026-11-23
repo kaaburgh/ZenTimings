@@ -88,6 +88,22 @@ internal static class Program
             "MSI default synthetic variables pass IFR plausibility");
         Check(report.Find("tCL").Source == "Auto" && report.Find("Speed").Source == "Auto",
             "MSI default CBS/AOD/Setup selectors classify as Auto");
+        Check(report.Setup != null && report.Setup.Length == 0x7C4,
+            "MSI Setup varstore is retained for opt-in debug export");
+
+        amd[0x116] = 1;
+        Set16(amd, 0x117, 6000);
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        Check(report.Find("Speed").Source == "CBS"
+            && report.Find("Speed").StoredNumber == 6000
+            && report.Find("MCLK").DiffersFrom("3000.00", 3000) == false,
+            "MSI CBS target speed and derived MCLK are decoded");
+        aod[0x3C] = 1;
+        report = MsiMagB650SettingOrigins.FromBlobs(amd, aod, setup);
+        Check(report.Find("Speed").Source == "?"
+            && report.Find("Speed").Details.Contains("not interpreted"),
+            "MSI AOD Speed path remains unknown until selector semantics are verified");
+        aod[0x3C] = 255;
 
         amd[0x116] = 1;
         amd[0x119] = 1;

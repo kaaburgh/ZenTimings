@@ -190,6 +190,23 @@ namespace ZenTimings.BiosOrigin
         }
     }
 
+    // Explicitly opted-in, local-only capture of the variables listed for a board/BIOS candidate.
+    // Bytes are never uploaded; the Debug dialog only prints them when the sensitive-data checkbox is checked.
+    public sealed class FirmwareVariableCapture
+    {
+        internal FirmwareVariableCapture(string name, string guid)
+        {
+            Name = name;
+            Guid = guid;
+        }
+
+        public string Name { get; private set; }
+        public string Guid { get; private set; }
+        public byte[] Bytes { get; internal set; }
+        public uint? Attributes { get; internal set; }
+        public string Error { get; internal set; }
+    }
+
     public static class DrfxiSettingOrigins
     {
         public const string LayoutResource = "ZenTimings.Resources.BiosLayouts.drfxi-dragonrange-v1.json";
@@ -271,6 +288,74 @@ namespace ZenTimings.BiosOrigin
             }
         }
 
+        private static SettingOriginReport BlockedCandidate(
+            BiosOriginLayoutCatalog.BiosOriginCatalogMatch candidate, string message)
+        {
+            SettingOriginReport report = Unavailable(message);
+            report.LayoutId = candidate.LayoutId;
+            report.Plausibility = "not checked; catalog evidence status=" + candidate.Status;
+            return report;
+        }
+
+        // This method is called only from the explicit "Include BIOS setup variables" checkbox.
+        // It intentionally captures ai-proposed candidates without resolving or displaying their origins.
+        public static IList<FirmwareVariableCapture> CaptureCatalogVariables(string board, string biosVersion)
+        {
+            var captures = new List<FirmwareVariableCapture>();
+            BiosOriginLayoutCatalog.BiosOriginCatalogMatch candidate;
+            try
+            {
+                candidate = BiosOriginLayoutCatalog.Select(board, biosVersion);
+            }
+            catch (Exception ex)
+            {
+                captures.Add(new FirmwareVariableCapture("Catalog", null)
+                { Error = "Catalog selection failed: " + ex.Message });
+                return captures;
+            }
+
+            if (candidate == null)
+            {
+                captures.Add(new FirmwareVariableCapture("Catalog", null)
+                { Error = "No catalog candidate for this board / BIOS." });
+                return captures;
+            }
+
+            if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+            {
+                foreach (var variable in candidate.Variables)
+                    captures.Add(new FirmwareVariableCapture(variable.Name, variable.Guid)
+                    { Error = "Windows UEFI API is not available on this OS." });
+                return captures;
+            }
+
+            int privilegeError = EnablePrivilege();
+            foreach (var variable in candidate.Variables)
+            {
+                var capture = new FirmwareVariableCapture(variable.Name, variable.Guid);
+                if (privilegeError != 0)
+                {
+                    capture.Error = "Cannot enable firmware-read privilege: " + ErrorMeaning(privilegeError);
+                    captures.Add(capture);
+                    continue;
+                }
+
+                uint attributes;
+                int error;
+                byte[] bytes = ReadVariable(variable.Name, variable.Guid, out attributes, out error);
+                if (bytes == null)
+                    capture.Error = ErrorMeaning(error);
+                else
+                {
+                    capture.Bytes = bytes;
+                    capture.Attributes = attributes;
+                }
+                captures.Add(capture);
+            }
+
+            return captures;
+        }
+
         public static SettingOriginReport ReadFromFirmware(string board, string biosVersion)
         {
             try
@@ -279,9 +364,11 @@ namespace ZenTimings.BiosOrigin
                 if (candidate == null)
                     return Unavailable("No supported origin layout catalog entry for this board / BIOS.");
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
-                    return Unavailable("AI-proposed origin layouts require maintainer verification before display.");
+                    return BlockedCandidate(candidate,
+                        "AI-proposed origin layout candidate is recognized but is not trusted for origin display.");
                 if (candidate.Resolver != "drfxi-dragonrange-v1")
-                    return Unavailable("Origin layout has no trusted resolver: " + candidate.LayoutId);
+                    return BlockedCandidate(candidate,
+                        "Origin layout has no trusted resolver: " + candidate.LayoutId);
                 if (Environment.OSVersion.Platform != PlatformID.Win32NT)
                     return Unavailable("Windows UEFI API is not available on this OS.");
 
@@ -315,9 +402,11 @@ namespace ZenTimings.BiosOrigin
                 if (candidate == null)
                     return Unavailable("No supported origin layout for board / BIOS in debug report.");
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
-                    return Unavailable("AI-proposed origin layouts are not trusted for offline display.");
+                    return BlockedCandidate(candidate,
+                        "AI-proposed origin layout candidate is recognized but is not trusted for offline display.");
                 if (candidate.Resolver != "drfxi-dragonrange-v1")
-                    return Unavailable("Origin layout has no trusted offline resolver: " + candidate.LayoutId);
+                    return BlockedCandidate(candidate,
+                        "Origin layout has no trusted offline resolver: " + candidate.LayoutId);
                 var blobs = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
                 foreach (var variable in candidate.Variables)
                 {

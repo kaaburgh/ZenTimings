@@ -370,7 +370,7 @@ namespace ZenTimings.BiosOrigin
                 byte[] aod, setup;
                 blobs.TryGetValue("AodSetupRpl", out aod);
                 blobs.TryGetValue("Setup", out setup);
-                resolved = MsiMagB650SettingOrigins.FromBlobs(blobs["AmdSetupRPL"], aod, setup);
+                resolved = MsiMagB650SettingOrigins.FromBlobs(blobs["AmdSetupRPL"], aod, setup, candidate);
             }
             else
             {

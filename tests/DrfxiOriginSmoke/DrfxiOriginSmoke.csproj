@@ -35,11 +35,17 @@
     <Compile Include="..\..\WPF\BiosOrigin\DrfxiSettingOrigins.cs">
       <Link>DrfxiSettingOrigins.cs</Link>
     </Compile>
+    <Compile Include="..\..\WPF\BiosOrigin\MsiMagB650SettingOrigins.cs">
+      <Link>MsiMagB650SettingOrigins.cs</Link>
+    </Compile>
     <EmbeddedResource Include="..\..\WPF\Resources\BiosLayouts\catalog-v1.json">
       <LogicalName>ZenTimings.Resources.BiosLayouts.catalog-v1.json</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="..\..\WPF\Resources\BiosLayouts\drfxi-dragonrange-v1.json">
       <LogicalName>ZenTimings.Resources.BiosLayouts.drfxi-dragonrange-v1.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\WPF\Resources\BiosLayouts\msi-mag-b650-tomahawk-7d75v1e.json">
+      <LogicalName>ZenTimings.Resources.BiosLayouts.msi-mag-b650-tomahawk-7d75v1e.json</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

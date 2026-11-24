@@ -75,6 +75,11 @@ internal static class Program
         Check(BiosOriginLayoutCatalog.Select("MS-7D75", "1.E50") == null
             && BiosOriginLayoutCatalog.Select("MS-7D75", "1.E7") == null,
             "unsupported BIOS versions fail closed rather than prefix-match");
+        Check(BiosOriginLayoutCatalog.DescribeSelection("MS-7D75", "1.R2").Contains("not registered")
+            && BiosOriginLayoutCatalog.DescribeSelection("MS-7D75", "1.R2").Contains("1.E5"),
+            "catalog diagnosis distinguishes known board from unknown BIOS release");
+        Check(BiosOriginLayoutCatalog.DescribeSelection("NO-BOARD", "1.E0").Contains("No board token"),
+            "catalog diagnosis distinguishes an entirely unknown board");
         Check(catalog.Variables.Count == 3
             && catalog.Variables.Single(v => v.Name == "AmdSetupRPL").Optional == false
             && catalog.Variables.Single(v => v.Name == "AodSetupRpl").Optional
@@ -100,6 +105,13 @@ internal static class Program
         blobs["Setup"] = setup;
         Check(catalog.CheckFingerprint(blobs) == null,
             "MSI fingerprint accepts exact IFR varstore sizes");
+        byte[] badHeader = (byte[])amd.Clone();
+        badHeader[8] ^= 0x01;
+        blobs["AmdSetupRPL"] = badHeader;
+        Check(catalog.CheckFingerprint(blobs)?.Contains("0x8") == true
+            && catalogE5.CheckFingerprint(blobs)?.Contains("0x8") == true,
+            "both MSI releases check the identical three-word CBS NVAR default header");
+        blobs["AmdSetupRPL"] = amd;
         byte[] setupE5 = new byte[0x7C2];
         blobs["Setup"] = setupE5;
         Check(catalogE5.CheckFingerprint(blobs) == null
@@ -205,6 +217,17 @@ internal static class Program
         var badSetupReport = MsiMagB650SettingOrigins.FromBlobs(amd, null, badSetup, catalog);
         Check(!badSetupReport.IsMatched && badSetupReport.Setup.Length == 0x7C4,
             "MSI resolver rejects invalid EXPO selector but retains raw blob for opt-in diagnostics");
+        byte[] badAxmp = new byte[0x7C4];
+        badAxmp[0x73] = 3;
+        Check(!MsiMagB650SettingOrigins.FromBlobs(amd, null, badAxmp, catalog).IsMatched,
+            "MSI top-level A-XMP option 3 is invalid according to exact IFR options");
+        badAxmp = new byte[0x7C4];
+        badAxmp[0x595] = 3;
+        Check(!MsiMagB650SettingOrigins.FromBlobs(amd, null, badAxmp, catalog).IsMatched,
+            "MSI conditional A-XMP option 3 is invalid according to IFR");
+        badAxmp[0x595] = 2;
+        Check(MsiMagB650SettingOrigins.FromBlobs(amd, null, badAxmp, catalog).IsMatched,
+            "MSI conditional A-XMP Profile 2 is valid");
 
         string debug = "AmdSetupRPL.base64: " + Convert.ToBase64String(amd) + "\n";
         var replay = DrfxiSettingOrigins.FromDebugReport(
@@ -222,6 +245,83 @@ internal static class Program
             "MSI 1E5 replay uses selected fingerprint with the shared IFR mapping");
         Check(!wrongReplay.IsMatched && wrongReplay.Plausibility.StartsWith("failed:"),
             "MSI 1E5 Setup replayed under 1E0 must fail fingerprint validation");
+    }
+
+    private static void RunDiagnosticCaptureTests()
+    {
+        // Simulates a newer, unregistered MSI firmware. No Windows / UEFI API
+        // is called, and the independent evidence path is not a badge resolver.
+        byte[] amd = new byte[0x779];
+        byte[] setup = new byte[0x7C2];
+        byte[] pbs = new byte[] { 0x12, 0x34, 0x56 };
+        var attempted = new System.Collections.Generic.List<string>();
+        var lines = DrfxiSettingOrigins.FormatFirmwareDiagnostics(
+            "MS-7D75", "1.R2", "Micro-Star", "AMI", "MS-7D75", "E7D75AMS.1R2",
+            "ComboPI 1.3.x",
+            (name, guid) =>
+            {
+                attempted.Add(name);
+                if (name == "AmdSetupRPL")
+                    return new FirmwareVariableProbeResult { Bytes = amd, Attributes = 7 };
+                if (name == "Setup")
+                    return new FirmwareVariableProbeResult { Bytes = setup, Attributes = 7 };
+                if (name == "AMD_PBS_SETUP")
+                    return new FirmwareVariableProbeResult { Bytes = pbs, Attributes = 7 };
+                return new FirmwareVariableProbeResult { Win32Error = 203 };
+            });
+        string report = string.Join("\n", lines);
+        Check(attempted.SequenceEqual(new[]
+            { "AmdSetupRPL", "AodSetupRpl", "Setup", "AMD_PBS_SETUP" }),
+            "unknown firmware captures all four variables without stopping on missing AOD");
+        Check(report.Contains("not registered") && report.Contains("RAW EVIDENCE ONLY")
+            && report.Contains("UNVERIFIED"),
+            "unmatched catalog is explicitly marked as non-authoritative evidence");
+        Check(report.Contains("Win32_BaseBoard.Product: MS-7D75")
+            && report.Contains("Win32_BIOS.SMBIOSBIOSVersion: E7D75AMS.1R2")
+            && report.Contains("AGESA: ComboPI 1.3.x"),
+            "raw report includes exact WMI identity and AGESA context");
+        Check(report.Contains("AmdSetupRPL.base64: " + Convert.ToBase64String(amd))
+            && report.Contains("Setup.base64: " + Convert.ToBase64String(setup))
+            && report.Contains("AMD_PBS_SETUP.base64: " + Convert.ToBase64String(pbs)),
+            "unknown firmware exports each successfully read variable independently");
+        Check(!report.Contains("AodSetupRpl.base64") && report.Contains("Win32 error 203")
+            && report.Contains("length: " + amd.Length) && report.Contains("SHA-256: "),
+            "missing AOD records error while other variables include size and SHA-256");
+        Check(report.Contains("CBS default header [+0,+4,+8]")
+            && report.Contains("CBS tCL ctrl[0x119]")
+            && report.Contains("MSI EXPO [0x74]")
+            && report.Contains("MSI Memory Try It [0x597]"),
+            "unverified probes cover CBS header, timing controls, AOD selectors and MSI EXPO");
+        Check(!report.Contains("AOD tCL ctrl["),
+            "no AOD probe is fabricated when its variable is absent");
+
+        // Failure of one Win32 read must not prevent the following probes.
+        attempted.Clear();
+        var recovered = DrfxiSettingOrigins.FormatFirmwareDiagnostics(
+            "MS-7D75", "1.R2", "MSI", "AMI", "MS-7D75", "1.R2", "AGESA",
+            (name, guid) =>
+            {
+                attempted.Add(name);
+                if (name == "AmdSetupRPL") throw new InvalidOperationException("injected fault");
+                return new FirmwareVariableProbeResult { Bytes = new byte[4], Attributes = 7 };
+            });
+        Check(attempted.Count == 4 && string.Join("\n", recovered).Contains("injected fault")
+            && string.Join("\n", recovered).Contains("AodSetupRpl.base64: "),
+            "an exception in the first varstore read does not suppress later reads");
+
+        byte[] tooShort = new byte[2];
+        var raw = MsiMagB650SettingOrigins.DescribeRawReferenceOffsets("AmdSetupRPL", tooShort);
+        Check(raw.Any(x => x.Contains("<out-of-range>")),
+            "unverified probes safely handle short unknown firmware varstores");
+
+        // A supported BIOS also goes through the same explicit diagnostic path;
+        // no attempt to validate its layout or to create badges is made here.
+        var known = DrfxiSettingOrigins.FormatFirmwareDiagnostics(
+            "MS-7D75", "1.E5", "MSI", "AMI", "MS-7D75", "E7D75AMS.1E5", "AGESA",
+            (name, guid) => new FirmwareVariableProbeResult { Win32Error = 203 });
+        Check(string.Join("\n", known).Contains("Board and release matched") &&
+            string.Join("\n", known).Contains("candidate only"),
+            "known firmware capture remains diagnostic and cannot bypass fingerprint checks");
     }
 
     private static void Main()
@@ -488,6 +588,7 @@ internal static class Program
             "loaded DDR4 APCB bytes preserve the original dump format");
 
         RunMsiMagB650Tests();
+        RunDiagnosticCaptureTests();
 
         Console.WriteLine("OK: " + tests + " BIOS setting-origin and BIOS debug assertions");
     }

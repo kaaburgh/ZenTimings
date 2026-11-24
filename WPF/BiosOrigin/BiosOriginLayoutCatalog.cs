@@ -32,12 +32,55 @@ namespace ZenTimings.BiosOrigin
                 var candidates = catalog.Layouts
                     .Where(layout => BoardMatches(layout, board))
                     .SelectMany(layout => layout.Releases
-                        .Where(release => VersionMatches(biosVersion, release.Version))
-                        .Select(release => new BiosOriginCatalogMatch(layout, release.Status)))
+                        .Where(release => VersionMatches(biosVersion, release.Version)
+                            || (release.Aliases != null && release.Aliases.Any(a =>
+                                VersionMatches(biosVersion, a))))
+                        .Select(release => new BiosOriginCatalogMatch(layout, release)))
                     .ToList();
                 if (candidates.Count > 1)
                     throw new InvalidDataException("Ambiguous origin layout catalog match.");
                 return candidates.SingleOrDefault();
+            }
+        }
+
+        // Diagnostics only: explains selection without authorizing any badges or
+        // inferring that an unlisted firmware has compatible field offsets.
+        public static string DescribeSelection(string board, string biosVersion)
+        {
+            using (Stream stream = typeof(BiosOriginLayoutCatalog).Assembly.GetManifestResourceStream(ResourceName))
+            {
+                if (stream == null) return "catalog resource missing";
+                var serializer = new DataContractJsonSerializer(typeof(Catalog));
+                Catalog catalog = (Catalog)serializer.ReadObject(stream);
+                Validate(catalog);
+                List<LayoutEntry> boardMatches = catalog.Layouts
+                    .Where(layout => BoardMatches(layout, board)).ToList();
+                if (boardMatches.Count == 0)
+                    return "No board token matched; all offset probes are UNVERIFIED reference data.";
+                var versions = boardMatches.SelectMany(layout => layout.Releases
+                    .Where(r => VersionMatches(biosVersion, r.Version) ||
+                        (r.Aliases != null && r.Aliases.Any(a => VersionMatches(biosVersion, a))))
+                    .Select(r => new { Layout = layout, Release = r })).ToList();
+                if (versions.Count == 0)
+                {
+                    string known = string.Join(", ", boardMatches.SelectMany(l => l.Releases
+                        .Select(r => r.Version)).Distinct(StringComparer.OrdinalIgnoreCase));
+                    return "Board token matched: " +
+                        string.Join(", ", boardMatches.Select(l => l.Id)) +
+                        "; BIOS version is not registered (known: " + known +
+                        "); no setting-origin badges permitted.";
+                }
+                if (versions.Count != 1)
+                    return "Ambiguous layout candidates; no setting-origin badges permitted.";
+                var match = versions[0];
+                bool eligible = MayDisplayOrigins(match.Release.Status) &&
+                    (match.Layout.Resolver == "drfxi-dragonrange-v1" ||
+                     match.Layout.Resolver == "msi-mag-b650-raphael-v1e");
+                return "Board and release matched: " + match.Layout.Id +
+                    " / " + match.Release.Version + " (" + match.Release.Status +
+                    "); resolver: " + match.Layout.Resolver +
+                    (eligible ? "; candidate only — varstore fingerprint and IFR checks still required."
+                        : "; resolver or evidence tier not trusted; no badges permitted.");
             }
         }
 
@@ -55,7 +98,7 @@ namespace ZenTimings.BiosOrigin
         {
             if (string.IsNullOrWhiteSpace(running)) return false;
             return Regex.IsMatch(running, @"(?:^|[^0-9.])" + Regex.Escape(expected)
-                + @"(?:$|[^0-9.])", RegexOptions.CultureInvariant);
+                + @"(?:$|[^0-9.])", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
         }
 
         private static void Validate(Catalog catalog)
@@ -73,10 +116,17 @@ namespace ZenTimings.BiosOrigin
                     || entry.Releases == null || entry.Releases.Count == 0
                     || entry.Variables == null || entry.Variables.Count == 0)
                     throw new InvalidDataException("Invalid origin layout entry.");
-                if (entry.Releases.Any(r => string.IsNullOrWhiteSpace(r.Version)
-                    || (r.Status != "verified" && r.Status != "derived" && r.Status != "ai-proposed"))
-                    || entry.Releases.Select(r => r.Version).Distinct(StringComparer.Ordinal).Count() != entry.Releases.Count)
+                if (entry.Releases.Any(r => r == null || string.IsNullOrWhiteSpace(r.Version)
+                    || (r.Status != "verified" && r.Status != "derived" && r.Status != "ai-proposed")
+                    || (r.Aliases != null && r.Aliases.Any(string.IsNullOrWhiteSpace))))
                     throw new InvalidDataException("Invalid origin layout release status/version.");
+                var knownVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (Release release in entry.Releases)
+                {
+                    if (!knownVersions.Add(release.Version)
+                        || (release.Aliases != null && release.Aliases.Any(a => !knownVersions.Add(a))))
+                        throw new InvalidDataException("Duplicate BIOS version or alias in a layout.");
+                }
                 var variableKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (VariableFingerprint variable in entry.Variables)
                 {
@@ -86,6 +136,25 @@ namespace ZenTimings.BiosOrigin
                         || variable.Size <= 0 || variable.Size > 65536 || variable.Headers == null
                         || variable.Headers.Any(h => h.Offset < 0 || h.Offset + 4 > variable.Size))
                         throw new InvalidDataException("Invalid origin variable fingerprint.");
+                }
+
+                // Each BIOS release may override the fingerprint of a named varstore.
+                // Unknown names, duplicate overrides and impossible header offsets are errors.
+                foreach (Release release in entry.Releases)
+                {
+                    if (release.FingerprintOverrides == null) continue;
+                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (VariableSizeOverride item in release.FingerprintOverrides)
+                    {
+                        if (item == null || string.IsNullOrWhiteSpace(item.Name)
+                            || !variableKeys.Contains(item.Name) || !seen.Add(item.Name)
+                            || item.Size <= 0 || item.Size > 65536)
+                            throw new InvalidDataException("Invalid release fingerprint override.");
+                        VariableFingerprint variable = entry.Variables.Single(v =>
+                            string.Equals(v.Name, item.Name, StringComparison.OrdinalIgnoreCase));
+                        if (variable.Headers.Any(h => h.Offset + 4 > item.Size))
+                            throw new InvalidDataException("Release fingerprint is smaller than a header field.");
+                    }
                 }
             }
         }
@@ -111,7 +180,16 @@ namespace ZenTimings.BiosOrigin
         internal sealed class Release
         {
             [DataMember(Name = "version")] public string Version;
+            [DataMember(Name = "aliases")] public List<string> Aliases;
             [DataMember(Name = "status")] public string Status;
+            [DataMember(Name = "fingerprintOverrides")] public List<VariableSizeOverride> FingerprintOverrides;
+        }
+
+        [DataContract]
+        internal sealed class VariableSizeOverride
+        {
+            [DataMember(Name = "name")] public string Name;
+            [DataMember(Name = "size")] public int Size;
         }
 
         [DataContract]
@@ -121,6 +199,7 @@ namespace ZenTimings.BiosOrigin
             [DataMember(Name = "guid")] public string Guid;
             [DataMember(Name = "size")] public int Size;
             [DataMember(Name = "headers")] public List<HeaderValue> Headers;
+            [DataMember(Name = "optional")] public bool Optional;
         }
 
         [DataContract]
@@ -133,19 +212,31 @@ namespace ZenTimings.BiosOrigin
         public sealed class BiosOriginCatalogMatch
         {
             private readonly LayoutEntry entry;
+            private readonly Release release;
 
-            internal BiosOriginCatalogMatch(LayoutEntry entry, string status)
+            internal BiosOriginCatalogMatch(LayoutEntry entry, Release release)
             {
                 this.entry = entry;
-                Status = status;
+                this.release = release;
             }
 
             public string LayoutId => entry.Id;
             public string Resolver => entry.Resolver;
-            public string Status { get; }
+            public string Status => release.Status;
+            public string ReleaseVersion => release.Version;
+
+            public int ExpectedSize(string name)
+            {
+                VariableFingerprint variable = entry.Variables.Single(v =>
+                    string.Equals(v.Name, name, StringComparison.OrdinalIgnoreCase));
+                VariableSizeOverride alternative = release.FingerprintOverrides?.SingleOrDefault(v =>
+                    string.Equals(v.Name, name, StringComparison.OrdinalIgnoreCase));
+                return alternative == null ? variable.Size : alternative.Size;
+            }
 
             public IReadOnlyList<BiosOriginCatalogVariable> Variables =>
-                entry.Variables.Select(v => new BiosOriginCatalogVariable(v.Name, v.Guid)).ToList();
+                entry.Variables.Select(v =>
+                    new BiosOriginCatalogVariable(v.Name, v.Guid, v.Optional, ExpectedSize(v.Name))).ToList();
 
             // Evaluates the full fingerprint, not just SMBIOS model and version.
             // Missing blobs are mismatches; never assume that a candidate is valid.
@@ -156,8 +247,11 @@ namespace ZenTimings.BiosOrigin
                 {
                     byte[] bytes;
                     if (!blobs.TryGetValue(variable.Name, out bytes) || bytes == null)
+                    {
+                        if (variable.Optional) continue;
                         return variable.Name + ": missing UEFI variable";
-                    if (bytes.Length != variable.Size)
+                    }
+                    if (bytes.Length != ExpectedSize(variable.Name))
                         return variable.Name + ": unexpected variable size";
                     foreach (HeaderValue header in variable.Headers)
                     {
@@ -175,15 +269,19 @@ namespace ZenTimings.BiosOrigin
 
         public sealed class BiosOriginCatalogVariable
         {
-            internal BiosOriginCatalogVariable(string name, string guid)
+            internal BiosOriginCatalogVariable(string name, string guid, bool optional, int size)
             {
                 Name = name;
+                Optional = optional;
+                Size = size;
                 // Win32 GetFirmwareEnvironmentVariableExW requires a GUID string
                 // with braces, even though the catalog stores canonical UUIDs.
                 Guid = "{" + System.Guid.Parse(guid).ToString("D") + "}";
             }
             public string Name { get; }
             public string Guid { get; }
+            public bool Optional { get; }
+            public int Size { get; }
         }
     }
 }

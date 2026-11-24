@@ -44,6 +44,73 @@
           "headers": []
         }
       ]
+    },
+    {
+      "id": "msi-mag-b650-tomahawk-7d75v1e",
+      "resolver": "msi-mag-b650-raphael-v1e",
+      "boardTokens": [
+        "MS-7D75",
+        "MAG B650 TOMAHAWK WIFI"
+      ],
+      "releases": [
+        {
+          "version": "1.E0",
+          "aliases": [
+            "E7D75AMS.1E0",
+            "7D75v1E"
+          ],
+          "status": "derived"
+        },
+        {
+          "version": "1.E5",
+          "aliases": [
+            "E7D75AMS.1E5",
+            "7D75v1E5"
+          ],
+          "status": "derived",
+          "fingerprintOverrides": [
+            {
+              "name": "Setup",
+              "size": 1986
+            }
+          ]
+        }
+      ],
+      "variables": [
+        {
+          "name": "AmdSetupRPL",
+          "guid": "3a997502-647a-4c82-998e-52ef9486a247",
+          "size": 1913,
+          "headers": [
+            {
+              "offset": 0,
+              "u32": 0
+            },
+            {
+              "offset": 4,
+              "u32": 0
+            },
+            {
+              "offset": 8,
+              "u32": 0
+            }
+          ]
+        },
+        {
+          "name": "AodSetupRpl",
+          "guid": "5ed15dc0-edef-4161-9151-6014c4cc630c",
+          "size": 800,
+          "headers": [],
+          "optional": true
+        },
+        {
+          "name": "Setup",
+          "guid": "ec87d643-eba4-4bb5-a1e5-3f3e36b20da9",
+          "size": 1988,
+          "headers": [],
+          "optional": true
+        }
+      ]
     }
   ]
 }

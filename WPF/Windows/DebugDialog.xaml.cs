@@ -76,6 +76,30 @@ namespace ZenTimings.Windows
             return instanceName;
         }
 
+        private static string ReadSmbiosProperty(string wmiClass, string property)
+        {
+            // Fixed class/property names supplied by this program, not user text.
+            // Capture exact WMI strings for diagnosing catalog selection failures.
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher("root\\cimv2",
+                    "SELECT " + property + " FROM " + wmiClass))
+                using (var values = searcher.Get())
+                {
+                    foreach (ManagementBaseObject item in values)
+                    {
+                        object value = item[property];
+                        return value == null ? "<null>" : value.ToString();
+                    }
+                }
+                return "<no WMI result>";
+            }
+            catch (Exception ex)
+            {
+                return "<WMI unavailable: " + ex.Message + ">";
+            }
+        }
+
         private void PrintWmiFunctions()
         {
             try
@@ -449,13 +473,16 @@ namespace ZenTimings.Windows
                             + (entry.Stored != null ? " (saved " + entry.Stored + ")" : ""));
                 if (includeBiosSetupVariables)
                 {
-                    if (origins.AmdSetup != null && origins.AodSetup != null)
-                    {
-                        AddLine("AmdSetupRPL.base64: " + Convert.ToBase64String(origins.AmdSetup));
-                        AddLine("AodSetupRpl.base64: " + Convert.ToBase64String(origins.AodSetup));
-                    }
-                    else
-                        AddLine("BIOS setup variable blobs were requested but could not be read.");
+                    // Independent of origin catalog matching: even an unknown MSI
+                    // BIOS still produces a read-only four-varstore diagnostic.
+                    foreach (string line in DrfxiSettingOrigins.CaptureFirmwareDiagnostics(
+                        cpu.systemInfo?.MbName, cpu.systemInfo?.BiosVersion,
+                        ReadSmbiosProperty("Win32_BaseBoard", "Manufacturer"),
+                        ReadSmbiosProperty("Win32_BIOS", "Manufacturer"),
+                        ReadSmbiosProperty("Win32_BaseBoard", "Product"),
+                        ReadSmbiosProperty("Win32_BIOS", "SMBIOSBIOSVersion"),
+                        cpu.systemInfo?.AgesaVersion))
+                        AddLine(line);
                 }
                 else
                     AddLine("BIOS setup variable blobs omitted (checkbox not selected).");

@@ -1,0 +1,401 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Json;
+
+namespace ZenTimings.BiosOrigin
+{
+    // MSI's own Setup varstore and AMD's CBS/AOD varstores coexist on this board.
+    // This resolver reports saved menu state only; it does not claim that a profile
+    // or override was applied by firmware.
+    public static class MsiMagB650SettingOrigins
+    {
+        public const string LayoutResource =
+            "ZenTimings.Resources.BiosLayouts.msi-mag-b650-tomahawk-7d75v1e.json";
+
+        public static SettingOriginReport FromBlobs(byte[] amd, byte[] aod, byte[] setup,
+            BiosOriginLayoutCatalog.BiosOriginCatalogMatch firmware)
+        {
+            try
+            {
+                Layout layout = LoadLayout();
+                if (firmware == null || firmware.Resolver != "msi-mag-b650-raphael-v1e"
+                    || firmware.LayoutId != layout.Id)
+                    return Unavailable("MSI firmware resolver requires its matching catalog release.");
+                string reason = CheckPlausibility(layout, amd, aod, setup, firmware);
+                if (reason != null)
+                    return new SettingOriginReport
+                    {
+                        LayoutId = layout.Id,
+                        IsMatched = false,
+                        Plausibility = "failed: " + reason,
+                        Status = "MSI " + firmware.ReleaseVersion + " layout rejected: " + reason,
+                        AmdSetup = amd == null ? null : (byte[])amd.Clone(),
+                        AodSetup = aod == null ? null : (byte[])aod.Clone(),
+                        Setup = setup == null ? null : (byte[])setup.Clone()
+                    };
+
+                bool aodAvailable = aod != null;
+                bool setupAvailable = setup != null;
+                bool aodGate = aodAvailable && aod[layout.Gates.AodActive] == 1;
+                bool cbsGate = amd[layout.Gates.CbsActive] == 1;
+                bool axmpSelected = setupAvailable && layout.SetupProfiles.AxmpOffsets.Any(o => setup[o] != 0);
+                bool expoSelected = setupAvailable && layout.SetupProfiles.ExpoOffsets.Any(o => setup[o] != 0);
+                bool memoryTryItSelected = setupAvailable && layout.SetupProfiles.MemoryTryItOffsets
+                    .Any(o => U16(setup, o) != 0);
+                bool profileSelected = axmpSelected || expoSelected || memoryTryItSelected;
+                string profileDetails = BuildProfileDetails(layout, setup, axmpSelected, expoSelected,
+                    memoryTryItSelected);
+
+                var report = new SettingOriginReport
+                {
+                    LayoutId = layout.Id,
+                    IsMatched = true,
+                    Plausibility = "passed",
+                    Status = "matched (MSI " + firmware.ReleaseVersion
+                        + " IFR-derived saved setup; hardware validation pending)",
+                    AmdSetup = (byte[])amd.Clone(),
+                    AodSetup = aodAvailable ? (byte[])aod.Clone() : null,
+                    Setup = setupAvailable ? (byte[])setup.Clone() : null
+                };
+
+                foreach (TimingField field in layout.Timings)
+                {
+                    bool aodManual = aodGate && aod[field.AodCtrl] == 1;
+                    bool cbsManual = cbsGate && amd[field.CbsCtrl] == 1;
+                    int aodValue = aodAvailable ? U16(aod, field.AodValue) : 0;
+                    int cbsValue = U16(amd, field.CbsValue);
+                    report.Add(Choose(field.Row, aodManual, cbsManual, aodAvailable,
+                        setupAvailable, profileSelected, aodValue, cbsValue, profileDetails));
+                }
+
+                // CBS exposes a conventional target-speed field. MSI's AOD 0x3A
+                // selector is present in IFR but its write semantics are not known
+                // for this BIOS, so an enabled AOD speed path is deliberately unknown.
+                SettingOriginRow speed;
+                if (cbsGate && aodAvailable && !aodGate)
+                {
+                    speed = Stored("Speed", "speed", "CBS", U16(amd, layout.Speed.CbsValue),
+                        "AMD CBS Memory Target Speed is Manual. " + profileDetails);
+                }
+                else if (cbsGate || aodGate || !aodAvailable || !setupAvailable || profileSelected)
+                {
+                    speed = Unknown("Speed",
+                        "MSI 7D75v1E Speed source is unresolved. CBS gate=" + (cbsGate ? "enabled" : "Auto")
+                        + "; AOD gate=" + (aodAvailable ? (aodGate ? "enabled" : "Auto") : "unavailable")
+                        + ". The AOD selector at 0x" + layout.Speed.AodSelector.ToString("X")
+                        + " is not interpreted for this BIOS.", profileDetails);
+                }
+                else
+                {
+                    speed = Unknown("Speed",
+                        "AMD CBS/AOD speed gates are Auto, but MSI exposes its own DRAM Frequency "
+                        + "at Setup[0x51B]/Setup[0x68C]. Those conditional paths are not yet mapped.",
+                        profileDetails);
+                }
+                report.Add(speed);
+                report.Add(new SettingOriginRow
+                {
+                    Row = "MCLK",
+                    Source = speed.Source,
+                    Stored = speed.Stored,
+                    StoredNumber = speed.StoredNumber,
+                    Kind = "mclk",
+                    Details = "MCLK is half the DDR data rate selected in BIOS. " + (speed.Details ?? ""),
+                    OtherMenuManual = speed.OtherMenuManual
+                });
+
+                SettingOriginRow trfc = report.Find("tRFC");
+                if (trfc != null)
+                    report.Add(new SettingOriginRow
+                    {
+                        Row = "tRFC (ns)",
+                        Source = trfc.Source,
+                        Details = "Derived from the running tRFC and MCLK; source classification follows tRFC. "
+                            + (trfc.Details ?? "")
+                    });
+
+                return report;
+            }
+            catch (Exception ex)
+            {
+                return Unavailable("MSI 7D75v1E layout load / resolve failed: " + ex.Message);
+            }
+        }
+
+        private static SettingOriginRow Choose(string row, bool aodManual, bool cbsManual,
+            bool aodAvailable, bool setupAvailable, bool profileSelected,
+            int aodValue, int cbsValue, string profileDetails)
+        {
+            if (aodManual && cbsManual)
+                return Unknown(row, "Both AMD Overclocking and AMD CBS are Manual. "
+                    + "Their precedence is not established for MSI BIOS 7D75v1E.", profileDetails);
+            if (aodManual)
+                return Stored(row, "timing", "AOD", aodValue,
+                    "AMD Overclocking (AodSetupRpl) has a Manual control for this timing. "
+                    + "The saved setting is not proof of hardware application. " + profileDetails);
+            if (cbsManual)
+            {
+                if (!aodAvailable)
+                    return Unknown(row, "AMD CBS has a Manual value, but AodSetupRpl was not runtime-readable; "
+                        + "a second-menu override cannot be ruled out.", profileDetails);
+                return Stored(row, "timing", "CBS", cbsValue,
+                    "AMD CBS (AmdSetupRPL) has a Manual control for this timing. "
+                    + "The saved setting is not proof of hardware application. " + profileDetails);
+            }
+            if (!aodAvailable)
+                return Unknown(row, "AodSetupRpl was not runtime-readable; Auto cannot be established.", profileDetails);
+            if (!setupAvailable)
+                return Unknown(row, "MSI Setup was not runtime-readable; the A-XMP / EXPO profile state is unknown.", profileDetails);
+            if (profileSelected)
+                return Unknown(row, "No manual AMD CBS/AOD override was found, but an MSI A-XMP / EXPO selector is non-zero. "
+                    + "The profile's per-timing application path is not mapped.", profileDetails);
+            return Unknown(row, "No AMD CBS/AOD Manual control was found, but independent MSI "
+                + "DRAM Timing / High-Efficiency Mode / user-profile paths are not fully mapped. "
+                + "Auto cannot yet be established for this board.", profileDetails);
+        }
+
+        private static SettingOriginRow Stored(string row, string kind, string source, int value, string details)
+        {
+            return new SettingOriginRow
+            {
+                Row = row,
+                Kind = kind,
+                Source = source,
+                Stored = value.ToString(CultureInfo.InvariantCulture),
+                StoredNumber = value,
+                Details = details
+            };
+        }
+
+        private static SettingOriginRow Unknown(string row, string details, string profileDetails) =>
+            new SettingOriginRow { Row = row, Source = "?", Details = details + " " + profileDetails };
+
+        private static string BuildProfileDetails(Layout layout, byte[] setup,
+            bool axmpSelected, bool expoSelected, bool memoryTryItSelected)
+        {
+            if (setup == null)
+                return "MSI Setup variable was not readable; A-XMP/EXPO selection is unknown.";
+            string axmp = string.Join(", ", layout.SetupProfiles.AxmpOffsets.Select(o =>
+                "0x" + o.ToString("X") + "=" + setup[o].ToString(CultureInfo.InvariantCulture)));
+            string expo = string.Join(", ", layout.SetupProfiles.ExpoOffsets.Select(o =>
+                "0x" + o.ToString("X") + "=" + setup[o].ToString(CultureInfo.InvariantCulture)));
+            string tryIt = string.Join(", ", layout.SetupProfiles.MemoryTryItOffsets.Select(o =>
+                "0x" + o.ToString("X") + "=" + U16(setup, o).ToString(CultureInfo.InvariantCulture)));
+            return "MSI Setup profile selectors (raw): A-XMP [" + axmp + "]; EXPO [" + expo
+                + "]; Memory Try It [" + tryIt + "]. "
+                + (expoSelected || axmpSelected || memoryTryItSelected
+                    ? "At least one selector is non-zero; the active conditional group and effective application are not established."
+                    : "Those selectors are zero, but other MSI OC/DRAM Timing controls remain unmapped.");
+        }
+
+        private static string CheckPlausibility(Layout layout, byte[] amd, byte[] aod, byte[] setup,
+            BiosOriginLayoutCatalog.BiosOriginCatalogMatch firmware)
+        {
+            // The shared mapping contains offsets only. The selected BIOS release
+            // provides the authoritative, independently checked varstore sizes.
+            int amdSize = firmware.ExpectedSize("AmdSetupRPL");
+            int aodSize = firmware.ExpectedSize("AodSetupRpl");
+            int setupSize = firmware.ExpectedSize("Setup");
+            if (amd == null || amd.Length != amdSize)
+                return "AmdSetupRPL size is not 0x" + amdSize.ToString("X");
+            if (aod != null && aod.Length != aodSize)
+                return "AodSetupRpl size is not 0x" + aodSize.ToString("X");
+            if (setup != null && setup.Length != setupSize)
+                return "Setup size is not 0x" + setupSize.ToString("X");
+
+            int cbsGate = amd[layout.Gates.CbsActive];
+            if (cbsGate != 1 && cbsGate != 255)
+                return "CBS Active Memory Timing Settings gate outside IFR options";
+            if (aod != null)
+            {
+                int aodGate = aod[layout.Gates.AodActive];
+                if (aodGate != 1 && aodGate != 255)
+                    return "AOD Active Memory Timing Settings gate outside IFR options";
+            }
+
+            foreach (TimingField field in layout.Timings)
+            {
+                int cbsControl = amd[field.CbsCtrl];
+                if (cbsControl != 0 && cbsControl != 1)
+                    return field.Row + " CBS control outside IFR options {0,1}";
+                if (cbsControl == 1 && !ValidStep(U16(amd, field.CbsValue),
+                    field.CbsMin, field.CbsMax, field.CbsStep))
+                    return field.Row + " CBS value outside IFR range/step";
+
+                if (aod != null)
+                {
+                    int aodControl = aod[field.AodCtrl];
+                    if (aodControl != 0 && aodControl != 1)
+                        return field.Row + " AOD control outside IFR options {0,1}";
+                    if (aodControl == 1 && !ValidStep(U16(aod, field.AodValue),
+                        field.AodMin, field.AodMax, field.AodStep))
+                        return field.Row + " AOD value outside IFR range/step";
+                }
+            }
+
+            if (cbsGate == 1 && !ValidSpeed(U16(amd, layout.Speed.CbsValue)))
+                return "CBS Memory Target Speed outside MSI IFR options";
+            if (setup != null)
+            {
+                foreach (int offset in layout.SetupProfiles.AxmpOffsets)
+                    if (setup[offset] != 0 && setup[offset] != 1 && setup[offset] != 2)
+                        return "MSI A-XMP selector outside IFR options {0,1,2}";
+                foreach (int offset in layout.SetupProfiles.ExpoOffsets)
+                    if (setup[offset] > 3) return "MSI EXPO selector outside IFR options";
+                foreach (int offset in layout.SetupProfiles.MemoryTryItOffsets)
+                    if (U16(setup, offset) > 0x314)
+                        return "MSI Memory Try It value outside IFR range";
+            }
+            return null;
+        }
+
+        private static bool ValidSpeed(int value) =>
+            value == 2000 || value == 2400 ||
+            (value >= 3200 && value <= 11200 && value % 200 == 0);
+
+        private static bool ValidStep(int value, int min, int max, int step) =>
+            value >= min && value <= max && (step <= 0 || (value - min) % step == 0);
+
+        private static int U16(byte[] data, int offset) =>
+            data[offset] | (data[offset + 1] << 8);
+
+        private static SettingOriginReport Unavailable(string status) =>
+            new SettingOriginReport
+            {
+                LayoutId = null,
+                IsMatched = false,
+                Plausibility = "not checked",
+                Status = status
+            };
+
+        // Raw evidence only. This table comes from MSI 1E5/1E0 IFR and is
+        // useful when probing another BIOS, but MUST NOT infer Manual/Auto.
+        // The caller labels these probes unverified even when the layout matches.
+        public static IReadOnlyList<string> DescribeRawReferenceOffsets(string variableName, byte[] bytes)
+        {
+            var lines = new List<string>();
+            if (bytes == null) return lines;
+            Layout layout = LoadLayout();
+            if (string.Equals(variableName, "AmdSetupRPL", StringComparison.OrdinalIgnoreCase))
+            {
+                lines.Add("  CBS default header [+0,+4,+8] u32: " +
+                    Raw32(bytes, 0) + " / " + Raw32(bytes, 4) + " / " + Raw32(bytes, 8));
+                lines.Add("  CBS timing gate 0x" + layout.Gates.CbsActive.ToString("X") +
+                    "=" + Raw8(bytes, layout.Gates.CbsActive) +
+                    "; target speed 0x" + layout.Speed.CbsValue.ToString("X") +
+                    "=" + Raw16(bytes, layout.Speed.CbsValue));
+                foreach (TimingField field in layout.Timings)
+                    lines.Add("  CBS " + field.Row + " ctrl[0x" + field.CbsCtrl.ToString("X") +
+                        "]=" + Raw8(bytes, field.CbsCtrl) + " value[0x" +
+                        field.CbsValue.ToString("X") + "]=" + Raw16(bytes, field.CbsValue));
+            }
+            else if (string.Equals(variableName, "AodSetupRpl", StringComparison.OrdinalIgnoreCase))
+            {
+                lines.Add("  AOD selector 0x" + layout.Speed.AodSelector.ToString("X") +
+                    "=" + Raw8(bytes, layout.Speed.AodSelector) +
+                    "; timing gate 0x" + layout.Gates.AodActive.ToString("X") +
+                    "=" + Raw8(bytes, layout.Gates.AodActive) +
+                    "; speed 0x" + layout.Speed.AodValue.ToString("X") +
+                    "=" + Raw16(bytes, layout.Speed.AodValue));
+                foreach (TimingField field in layout.Timings)
+                    lines.Add("  AOD " + field.Row + " ctrl[0x" + field.AodCtrl.ToString("X") +
+                        "]=" + Raw8(bytes, field.AodCtrl) + " value[0x" +
+                        field.AodValue.ToString("X") + "]=" + Raw16(bytes, field.AodValue));
+            }
+            else if (string.Equals(variableName, "Setup", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (int offset in layout.SetupProfiles.AxmpOffsets)
+                    lines.Add("  MSI A-XMP [0x" + offset.ToString("X") + "]=" + Raw8(bytes, offset));
+                foreach (int offset in layout.SetupProfiles.ExpoOffsets)
+                    lines.Add("  MSI EXPO [0x" + offset.ToString("X") + "]=" + Raw8(bytes, offset));
+                foreach (int offset in layout.SetupProfiles.MemoryTryItOffsets)
+                    lines.Add("  MSI Memory Try It [0x" + offset.ToString("X") + "]=" + Raw16(bytes, offset));
+                foreach (int offset in new[] { 0x51B, 0x68C })
+                    lines.Add("  MSI DRAM Frequency [0x" + offset.ToString("X") + "]=" + Raw16(bytes, offset));
+                foreach (int offset in new[] { 0x516, 0x686 })
+                    lines.Add("  MSI FCLK Frequency [0x" + offset.ToString("X") + "]=" + Raw16(bytes, offset));
+                foreach (int offset in new[] { 0x518, 0x688 })
+                    lines.Add("  MSI UCLK DIV1 [0x" + offset.ToString("X") + "]=" + Raw8(bytes, offset));
+                foreach (int offset in new[] { 0x57D, 0x6F2, 0x57E, 0x6F3 })
+                    lines.Add("  MSI efficiency/preset [0x" + offset.ToString("X") + "]=" + Raw8(bytes, offset));
+            }
+            return lines;
+        }
+
+        private static string Raw8(byte[] data, int offset) =>
+            offset < 0 || offset >= data.Length ? "<out-of-range>" :
+                "0x" + data[offset].ToString("X2");
+
+        private static string Raw16(byte[] data, int offset) =>
+            offset < 0 || offset + 2 > data.Length ? "<out-of-range>" :
+                "0x" + U16(data, offset).ToString("X4");
+
+        private static string Raw32(byte[] data, int offset) =>
+            offset < 0 || offset + 4 > data.Length ? "<out-of-range>" :
+                "0x" + ((uint)data[offset] | (uint)data[offset + 1] << 8 |
+                    (uint)data[offset + 2] << 16 | (uint)data[offset + 3] << 24).ToString("X8");
+
+        private static Layout LoadLayout()
+        {
+            using (Stream stream = typeof(MsiMagB650SettingOrigins).Assembly.GetManifestResourceStream(LayoutResource))
+            {
+                if (stream == null) throw new InvalidOperationException("Embedded MSI 7D75v1E layout resource missing.");
+                var serializer = new DataContractJsonSerializer(typeof(Layout));
+                return (Layout)serializer.ReadObject(stream);
+            }
+        }
+
+        [DataContract]
+        private sealed class Layout
+        {
+            [DataMember(Name = "id")] public string Id;
+            [DataMember(Name = "gates")] public Gates Gates;
+            [DataMember(Name = "speed")] public Speed Speed;
+            [DataMember(Name = "setupProfiles")] public SetupProfiles SetupProfiles;
+            [DataMember(Name = "timings")] public List<TimingField> Timings;
+        }
+
+        [DataContract]
+        private sealed class Gates
+        {
+            [DataMember(Name = "aodActive")] public int AodActive;
+            [DataMember(Name = "cbsActive")] public int CbsActive;
+        }
+
+        [DataContract]
+        private sealed class Speed
+        {
+            [DataMember(Name = "aodSelector")] public int AodSelector;
+            [DataMember(Name = "aodValue")] public int AodValue;
+            [DataMember(Name = "cbsValue")] public int CbsValue;
+        }
+
+        [DataContract]
+        private sealed class SetupProfiles
+        {
+            [DataMember(Name = "aXmpOffsets")] public List<int> AxmpOffsets;
+            [DataMember(Name = "expoOffsets")] public List<int> ExpoOffsets;
+            [DataMember(Name = "memoryTryItOffsets")] public List<int> MemoryTryItOffsets;
+        }
+
+        [DataContract]
+        private sealed class TimingField
+        {
+            [DataMember(Name = "row")] public string Row;
+            [DataMember(Name = "aodCtrl")] public int AodCtrl;
+            [DataMember(Name = "aodValue")] public int AodValue;
+            [DataMember(Name = "cbsCtrl")] public int CbsCtrl;
+            [DataMember(Name = "cbsValue")] public int CbsValue;
+            [DataMember(Name = "aodMin")] public int AodMin;
+            [DataMember(Name = "aodMax")] public int AodMax;
+            [DataMember(Name = "aodStep")] public int AodStep;
+            [DataMember(Name = "cbsMin")] public int CbsMin;
+            [DataMember(Name = "cbsMax")] public int CbsMax;
+            [DataMember(Name = "cbsStep")] public int CbsStep;
+        }
+    }
+}

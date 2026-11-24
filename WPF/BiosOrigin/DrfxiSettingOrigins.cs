@@ -117,6 +117,7 @@ namespace ZenTimings.BiosOrigin
 
         internal byte[] AmdSetup { get; set; }
         internal byte[] AodSetup { get; set; }
+        internal byte[] Setup { get; set; }
         public string LayoutId { get; internal set; }
         public string Status { get; internal set; }
         public string Plausibility { get; internal set; }
@@ -188,6 +189,15 @@ namespace ZenTimings.BiosOrigin
             if (row != null) return Find(row);
             return string.IsNullOrWhiteSpace(bindingPath) ? Find(fallbackLabel) : null;
         }
+    }
+
+    // Diagnostic-only result: never passed to an origin resolver without its
+    // separate catalog and IFR checks. Raw bytes require explicit user opt-in.
+    public sealed class FirmwareVariableProbeResult
+    {
+        public byte[] Bytes { get; set; }
+        public uint Attributes { get; set; }
+        public int Win32Error { get; set; }
     }
 
     public static class DrfxiSettingOrigins
@@ -271,6 +281,109 @@ namespace ZenTimings.BiosOrigin
             }
         }
 
+        // Always independent of the layout catalog. ONLY call this from the
+        // explicit Debug Report "Include BIOS setup variables" opt-in path.
+        // Read-only GetFirmwareEnvironmentVariableExW, no writes or uploads.
+        public static IReadOnlyList<string> CaptureFirmwareDiagnostics(
+            string board, string biosVersion, string boardVendor, string biosVendor,
+            string smbiosBoard, string smbiosBiosVersion, string agesa)
+        {
+            int privilege = Environment.OSVersion.Platform == PlatformID.Win32NT
+                ? EnablePrivilege() : 1;
+            return FormatFirmwareDiagnostics(board, biosVersion, boardVendor, biosVendor,
+                smbiosBoard, smbiosBiosVersion, agesa,
+                (name, guid) =>
+                {
+                    if (privilege != 0)
+                        return new FirmwareVariableProbeResult { Win32Error = privilege };
+                    uint attributes;
+                    int error;
+                    byte[] bytes = ReadVariable(name, guid, out attributes, out error);
+                    return new FirmwareVariableProbeResult
+                    {
+                        Bytes = bytes, Attributes = attributes, Win32Error = error
+                    };
+                });
+        }
+
+        // Pure formatter with an injectable read function for tests. A failure
+        // reading one varstore never suppresses attempts to read the others.
+        public static IReadOnlyList<string> FormatFirmwareDiagnostics(
+            string board, string biosVersion, string boardVendor, string biosVendor,
+            string smbiosBoard, string smbiosBiosVersion, string agesa,
+            Func<string, string, FirmwareVariableProbeResult> read)
+        {
+            if (read == null) throw new ArgumentNullException(nameof(read));
+            var lines = new List<string>();
+            lines.Add("Capture: explicit user opt-in; read-only UEFI variables.");
+            lines.Add("This section is RAW EVIDENCE ONLY: no Manual/Auto badges are derived from it.");
+            lines.Add("Resolver board (systemInfo.MbName): " + (board ?? "<unavailable>"));
+            lines.Add("Resolver BIOS (systemInfo.BiosVersion): " + (biosVersion ?? "<unavailable>"));
+            lines.Add("Win32_BaseBoard.Product: " + (smbiosBoard ?? "<unavailable>"));
+            lines.Add("Win32_BaseBoard.Manufacturer: " + (boardVendor ?? "<unavailable>"));
+            lines.Add("Win32_BIOS.SMBIOSBIOSVersion: " + (smbiosBiosVersion ?? "<unavailable>"));
+            lines.Add("Win32_BIOS.Manufacturer: " + (biosVendor ?? "<unavailable>"));
+            lines.Add("AGESA: " + (agesa ?? "<unavailable>"));
+            try
+            {
+                lines.Add("Catalog decision: " + BiosOriginLayoutCatalog.DescribeSelection(board, biosVersion));
+            }
+            catch (Exception ex)
+            {
+                lines.Add("Catalog decision failed: " + ex.Message + "; no badges may be inferred.");
+            }
+            lines.Add("Reference offsets below are from MSI 7D75v1E5/1E0 IFR.");
+            lines.Add("UNVERIFIED — these offsets MUST NOT be interpreted as matching an unknown BIOS.");
+
+            var varstores = new[]
+            {
+                new { Name = "AmdSetupRPL", Guid = "{3a997502-647a-4c82-998e-52ef9486a247}" },
+                new { Name = "AodSetupRpl", Guid = "{5ed15dc0-edef-4161-9151-6014c4cc630c}" },
+                new { Name = "Setup", Guid = "{ec87d643-eba4-4bb5-a1e5-3f3e36b20da9}" },
+                new { Name = "AMD_PBS_SETUP", Guid = "{a339d746-f678-49b3-9fc7-54ce0f9df226}" }
+            };
+            foreach (var variable in varstores)
+            {
+                lines.Add("Variable: " + variable.Name + " GUID " + variable.Guid);
+                FirmwareVariableProbeResult probe;
+                try
+                {
+                    probe = read(variable.Name, variable.Guid);
+                }
+                catch (Exception ex)
+                {
+                    lines.Add("  Read error: " + ex.GetType().Name + ": " + ex.Message);
+                    continue;
+                }
+                if (probe == null || probe.Bytes == null)
+                {
+                    int error = probe == null ? -1 : probe.Win32Error;
+                    lines.Add("  Read failed: " + ErrorMeaning(error) + " (" + error + ")");
+                    continue;
+                }
+                lines.Add("  Win32 error: " + probe.Win32Error +
+                    "; attributes: 0x" + probe.Attributes.ToString("X8") +
+                    "; length: " + probe.Bytes.Length);
+                using (var sha = System.Security.Cryptography.SHA256.Create())
+                    lines.Add("  SHA-256: " + BitConverter.ToString(sha.ComputeHash(probe.Bytes))
+                        .Replace("-", "").ToLowerInvariant());
+                try
+                {
+                    foreach (string line in MsiMagB650SettingOrigins.DescribeRawReferenceOffsets(
+                        variable.Name, probe.Bytes))
+                        lines.Add(line);
+                }
+                catch (Exception ex)
+                {
+                    lines.Add("  Raw offset reference unavailable: " + ex.Message);
+                }
+                // Reuse the existing offline replay format. No blob is emitted
+                // in any other code path or when the checkbox is unchecked.
+                lines.Add(variable.Name + ".base64: " + Convert.ToBase64String(probe.Bytes));
+            }
+            return lines;
+        }
+
         public static SettingOriginReport ReadFromFirmware(string board, string biosVersion)
         {
             try
@@ -280,7 +393,7 @@ namespace ZenTimings.BiosOrigin
                     return Unavailable("No supported origin layout catalog entry for this board / BIOS.");
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
                     return Unavailable("AI-proposed origin layouts require maintainer verification before display.");
-                if (candidate.Resolver != "drfxi-dragonrange-v1")
+                if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e")
                     return Unavailable("Origin layout has no trusted resolver: " + candidate.LayoutId);
                 if (Environment.OSVersion.Platform != PlatformID.Win32NT)
                     return Unavailable("Windows UEFI API is not available on this OS.");
@@ -296,7 +409,10 @@ namespace ZenTimings.BiosOrigin
                     int error;
                     byte[] bytes = ReadVariable(variable.Name, variable.Guid, out attributes, out error);
                     if (bytes == null)
+                    {
+                        if (variable.Optional) continue;
                         return Unavailable("UEFI read failed: " + variable.Name + ": " + ErrorMeaning(error));
+                    }
                     blobs.Add(variable.Name, bytes);
                 }
                 return ResolveCatalogCandidate(candidate, blobs);
@@ -316,14 +432,17 @@ namespace ZenTimings.BiosOrigin
                     return Unavailable("No supported origin layout for board / BIOS in debug report.");
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
                     return Unavailable("AI-proposed origin layouts are not trusted for offline display.");
-                if (candidate.Resolver != "drfxi-dragonrange-v1")
+                if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e")
                     return Unavailable("Origin layout has no trusted offline resolver: " + candidate.LayoutId);
                 var blobs = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
                 foreach (var variable in candidate.Variables)
                 {
                     byte[] bytes = DecodeReportBlob(reportText, variable.Name);
                     if (bytes == null)
+                    {
+                        if (variable.Optional) continue;
                         return Unavailable("This debug report lacks BIOS setup variable " + variable.Name + ".");
+                    }
                     blobs.Add(variable.Name, bytes);
                 }
                 return ResolveCatalogCandidate(candidate, blobs);
@@ -344,12 +463,31 @@ namespace ZenTimings.BiosOrigin
                 var rejected = Unavailable("Layout catalog fingerprint mismatch: " + error);
                 rejected.LayoutId = candidate.LayoutId;
                 rejected.Plausibility = "failed: " + error;
+                byte[] diagnosticBlob;
+                if (blobs.TryGetValue("AmdSetupRPL", out diagnosticBlob)) rejected.AmdSetup = diagnosticBlob;
+                if (blobs.TryGetValue("AodSetupRpl", out diagnosticBlob)) rejected.AodSetup = diagnosticBlob;
+                if (blobs.TryGetValue("Setup", out diagnosticBlob)) rejected.Setup = diagnosticBlob;
                 return rejected;
             }
 
-            // The catalog merely selects a candidate. The existing IFR-derived DRFXI
-            // resolver remains responsible for *every* field's plausibility validation.
-            SettingOriginReport resolved = FromBlobs(blobs["AmdSetupRPL"], blobs["AodSetupRpl"]);
+            // The catalog selects a family-specific IFR-derived resolver. Each resolver
+            // validates its own fields against the exact BIOS layout before showing badges.
+            SettingOriginReport resolved;
+            if (candidate.Resolver == "drfxi-dragonrange-v1")
+            {
+                resolved = FromBlobs(blobs["AmdSetupRPL"], blobs["AodSetupRpl"]);
+            }
+            else if (candidate.Resolver == "msi-mag-b650-raphael-v1e")
+            {
+                byte[] aod, setup;
+                blobs.TryGetValue("AodSetupRpl", out aod);
+                blobs.TryGetValue("Setup", out setup);
+                resolved = MsiMagB650SettingOrigins.FromBlobs(blobs["AmdSetupRPL"], aod, setup, candidate);
+            }
+            else
+            {
+                return Unavailable("Origin layout has no trusted resolver: " + candidate.Resolver);
+            }
             if (resolved.IsMatched)
             {
                 resolved.Status += "; catalog status=" + candidate.Status

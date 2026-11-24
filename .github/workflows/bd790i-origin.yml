@@ -62,7 +62,7 @@ jobs:
           if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
             throw 'The Release build did not produce ZenTimings.exe'
           }
-          $stage = Join-Path $PWD 'dist/ZenTimings-BIOS-Origin-Phase2-Windows'
+          $stage = Join-Path $PWD 'dist/ZenTimings-MSI-B650-1E0-1E5-Windows'
           New-Item -ItemType Directory -Path $stage -Force | Out-Null
           Get-ChildItem -LiteralPath $release -Force |
             Where-Object { $_.Extension -notin @('.pdb', '.xml') } |
@@ -108,11 +108,11 @@ jobs:
           }
           $sourceCommit = (git rev-parse HEAD).Trim()
           @(
-            'ZenTimings BIOS setting-origin Phase 2 - development build'
-            'PR: https://github.com/kaaburgh/ZenTimings/pull/2'
+            'ZenTimings MSI MAG B650 7D75v1E5 / 7D75v1E setting-origin - development build'
+            'PR: https://github.com/kaaburgh/ZenTimings/pull/5'
             "Git commit: $sourceCommit"
             'Configuration: Release, Any CPU, .NET Framework 4.7.2'
-            'Not signed. Origin column tested on one BD790i X3D (BIOS 1.15); updated Speed/MCLK and BMC fixes need verification. Does not write UEFI variables.'
+            'Not signed. MSI BIOS 1.E5 and 1.E0 share one IFR mapping but use separate Setup fingerprints; neither release has been verified on physical MSI hardware. Does not write UEFI variables.'
             'Built-in update check: disabled (custom build; never offers the official release).'
             'IMPORTANT: Includes the legacy InpOut native library for AOD/APOB reads.'
             'The native library may load a legacy kernel driver, which Windows 11 security can block.'
@@ -127,7 +127,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: ZenTimings-BIOS-Origin-Phase2-Windows
-          path: dist/ZenTimings-BIOS-Origin-Phase2-Windows/
+          name: ZenTimings-MSI-B650-1E0-1E5-Windows
+          path: dist/ZenTimings-MSI-B650-1E0-1E5-Windows/
           if-no-files-found: error
           retention-days: 14

@@ -191,6 +191,15 @@ namespace ZenTimings.BiosOrigin
         }
     }
 
+    // Diagnostic-only result: never passed to an origin resolver without its
+    // separate catalog and IFR checks. Raw bytes require explicit user opt-in.
+    public sealed class FirmwareVariableProbeResult
+    {
+        public byte[] Bytes { get; set; }
+        public uint Attributes { get; set; }
+        public int Win32Error { get; set; }
+    }
+
     public static class DrfxiSettingOrigins
     {
         public const string LayoutResource = "ZenTimings.Resources.BiosLayouts.drfxi-dragonrange-v1.json";
@@ -270,6 +279,109 @@ namespace ZenTimings.BiosOrigin
                 case 1300: return "SeSystemEnvironmentPrivilege is not assigned to this token";
                 default: return "Win32 error " + error;
             }
+        }
+
+        // Always independent of the layout catalog. ONLY call this from the
+        // explicit Debug Report "Include BIOS setup variables" opt-in path.
+        // Read-only GetFirmwareEnvironmentVariableExW, no writes or uploads.
+        public static IReadOnlyList<string> CaptureFirmwareDiagnostics(
+            string board, string biosVersion, string boardVendor, string biosVendor,
+            string smbiosBoard, string smbiosBiosVersion, string agesa)
+        {
+            int privilege = Environment.OSVersion.Platform == PlatformID.Win32NT
+                ? EnablePrivilege() : 1;
+            return FormatFirmwareDiagnostics(board, biosVersion, boardVendor, biosVendor,
+                smbiosBoard, smbiosBiosVersion, agesa,
+                (name, guid) =>
+                {
+                    if (privilege != 0)
+                        return new FirmwareVariableProbeResult { Win32Error = privilege };
+                    uint attributes;
+                    int error;
+                    byte[] bytes = ReadVariable(name, guid, out attributes, out error);
+                    return new FirmwareVariableProbeResult
+                    {
+                        Bytes = bytes, Attributes = attributes, Win32Error = error
+                    };
+                });
+        }
+
+        // Pure formatter with an injectable read function for tests. A failure
+        // reading one varstore never suppresses attempts to read the others.
+        public static IReadOnlyList<string> FormatFirmwareDiagnostics(
+            string board, string biosVersion, string boardVendor, string biosVendor,
+            string smbiosBoard, string smbiosBiosVersion, string agesa,
+            Func<string, string, FirmwareVariableProbeResult> read)
+        {
+            if (read == null) throw new ArgumentNullException(nameof(read));
+            var lines = new List<string>();
+            lines.Add("Capture: explicit user opt-in; read-only UEFI variables.");
+            lines.Add("This section is RAW EVIDENCE ONLY: no Manual/Auto badges are derived from it.");
+            lines.Add("Resolver board (systemInfo.MbName): " + (board ?? "<unavailable>"));
+            lines.Add("Resolver BIOS (systemInfo.BiosVersion): " + (biosVersion ?? "<unavailable>"));
+            lines.Add("Win32_BaseBoard.Product: " + (smbiosBoard ?? "<unavailable>"));
+            lines.Add("Win32_BaseBoard.Manufacturer: " + (boardVendor ?? "<unavailable>"));
+            lines.Add("Win32_BIOS.SMBIOSBIOSVersion: " + (smbiosBiosVersion ?? "<unavailable>"));
+            lines.Add("Win32_BIOS.Manufacturer: " + (biosVendor ?? "<unavailable>"));
+            lines.Add("AGESA: " + (agesa ?? "<unavailable>"));
+            try
+            {
+                lines.Add("Catalog decision: " + BiosOriginLayoutCatalog.DescribeSelection(board, biosVersion));
+            }
+            catch (Exception ex)
+            {
+                lines.Add("Catalog decision failed: " + ex.Message + "; no badges may be inferred.");
+            }
+            lines.Add("Reference offsets below are from MSI 7D75v1E5/1E0 IFR.");
+            lines.Add("UNVERIFIED — these offsets MUST NOT be interpreted as matching an unknown BIOS.");
+
+            var varstores = new[]
+            {
+                new { Name = "AmdSetupRPL", Guid = "{3a997502-647a-4c82-998e-52ef9486a247}" },
+                new { Name = "AodSetupRpl", Guid = "{5ed15dc0-edef-4161-9151-6014c4cc630c}" },
+                new { Name = "Setup", Guid = "{ec87d643-eba4-4bb5-a1e5-3f3e36b20da9}" },
+                new { Name = "AMD_PBS_SETUP", Guid = "{a339d746-f678-49b3-9fc7-54ce0f9df226}" }
+            };
+            foreach (var variable in varstores)
+            {
+                lines.Add("Variable: " + variable.Name + " GUID " + variable.Guid);
+                FirmwareVariableProbeResult probe;
+                try
+                {
+                    probe = read(variable.Name, variable.Guid);
+                }
+                catch (Exception ex)
+                {
+                    lines.Add("  Read error: " + ex.GetType().Name + ": " + ex.Message);
+                    continue;
+                }
+                if (probe == null || probe.Bytes == null)
+                {
+                    int error = probe == null ? -1 : probe.Win32Error;
+                    lines.Add("  Read failed: " + ErrorMeaning(error) + " (" + error + ")");
+                    continue;
+                }
+                lines.Add("  Win32 error: " + probe.Win32Error +
+                    "; attributes: 0x" + probe.Attributes.ToString("X8") +
+                    "; length: " + probe.Bytes.Length);
+                using (var sha = System.Security.Cryptography.SHA256.Create())
+                    lines.Add("  SHA-256: " + BitConverter.ToString(sha.ComputeHash(probe.Bytes))
+                        .Replace("-", "").ToLowerInvariant());
+                try
+                {
+                    foreach (string line in MsiMagB650SettingOrigins.DescribeRawReferenceOffsets(
+                        variable.Name, probe.Bytes))
+                        lines.Add(line);
+                }
+                catch (Exception ex)
+                {
+                    lines.Add("  Raw offset reference unavailable: " + ex.Message);
+                }
+                // Reuse the existing offline replay format. No blob is emitted
+                // in any other code path or when the checkbox is unchecked.
+                lines.Add(variable.Name + ".base64: " + Convert.ToBase64String(probe.Bytes));
+            }
+            return lines;
         }
 
         public static SettingOriginReport ReadFromFirmware(string board, string biosVersion)

@@ -271,6 +271,73 @@ namespace ZenTimings.BiosOrigin
                 Status = status
             };
 
+        // Raw evidence only. This table comes from MSI 1E5/1E0 IFR and is
+        // useful when probing another BIOS, but MUST NOT infer Manual/Auto.
+        // The caller labels these probes unverified even when the layout matches.
+        public static IReadOnlyList<string> DescribeRawReferenceOffsets(string variableName, byte[] bytes)
+        {
+            var lines = new List<string>();
+            if (bytes == null) return lines;
+            Layout layout = LoadLayout();
+            if (string.Equals(variableName, "AmdSetupRPL", StringComparison.OrdinalIgnoreCase))
+            {
+                lines.Add("  CBS default header [+0,+4,+8] u32: " +
+                    Raw32(bytes, 0) + " / " + Raw32(bytes, 4) + " / " + Raw32(bytes, 8));
+                lines.Add("  CBS timing gate 0x" + layout.Gates.CbsActive.ToString("X") +
+                    "=" + Raw8(bytes, layout.Gates.CbsActive) +
+                    "; target speed 0x" + layout.Speed.CbsValue.ToString("X") +
+                    "=" + Raw16(bytes, layout.Speed.CbsValue));
+                foreach (TimingField field in layout.Timings)
+                    lines.Add("  CBS " + field.Row + " ctrl[0x" + field.CbsCtrl.ToString("X") +
+                        "]=" + Raw8(bytes, field.CbsCtrl) + " value[0x" +
+                        field.CbsValue.ToString("X") + "]=" + Raw16(bytes, field.CbsValue));
+            }
+            else if (string.Equals(variableName, "AodSetupRpl", StringComparison.OrdinalIgnoreCase))
+            {
+                lines.Add("  AOD selector 0x" + layout.Speed.AodSelector.ToString("X") +
+                    "=" + Raw8(bytes, layout.Speed.AodSelector) +
+                    "; timing gate 0x" + layout.Gates.AodActive.ToString("X") +
+                    "=" + Raw8(bytes, layout.Gates.AodActive) +
+                    "; speed 0x" + layout.Speed.AodValue.ToString("X") +
+                    "=" + Raw16(bytes, layout.Speed.AodValue));
+                foreach (TimingField field in layout.Timings)
+                    lines.Add("  AOD " + field.Row + " ctrl[0x" + field.AodCtrl.ToString("X") +
+                        "]=" + Raw8(bytes, field.AodCtrl) + " value[0x" +
+                        field.AodValue.ToString("X") + "]=" + Raw16(bytes, field.AodValue));
+            }
+            else if (string.Equals(variableName, "Setup", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (int offset in layout.SetupProfiles.AxmpOffsets)
+                    lines.Add("  MSI A-XMP [0x" + offset.ToString("X") + "]=" + Raw8(bytes, offset));
+                foreach (int offset in layout.SetupProfiles.ExpoOffsets)
+                    lines.Add("  MSI EXPO [0x" + offset.ToString("X") + "]=" + Raw8(bytes, offset));
+                foreach (int offset in layout.SetupProfiles.MemoryTryItOffsets)
+                    lines.Add("  MSI Memory Try It [0x" + offset.ToString("X") + "]=" + Raw16(bytes, offset));
+                foreach (int offset in new[] { 0x51B, 0x68C })
+                    lines.Add("  MSI DRAM Frequency [0x" + offset.ToString("X") + "]=" + Raw16(bytes, offset));
+                foreach (int offset in new[] { 0x516, 0x686 })
+                    lines.Add("  MSI FCLK Frequency [0x" + offset.ToString("X") + "]=" + Raw16(bytes, offset));
+                foreach (int offset in new[] { 0x518, 0x688 })
+                    lines.Add("  MSI UCLK DIV1 [0x" + offset.ToString("X") + "]=" + Raw8(bytes, offset));
+                foreach (int offset in new[] { 0x57D, 0x6F2, 0x57E, 0x6F3 })
+                    lines.Add("  MSI efficiency/preset [0x" + offset.ToString("X") + "]=" + Raw8(bytes, offset));
+            }
+            return lines;
+        }
+
+        private static string Raw8(byte[] data, int offset) =>
+            offset < 0 || offset >= data.Length ? "<out-of-range>" :
+                "0x" + data[offset].ToString("X2");
+
+        private static string Raw16(byte[] data, int offset) =>
+            offset < 0 || offset + 2 > data.Length ? "<out-of-range>" :
+                "0x" + U16(data, offset).ToString("X4");
+
+        private static string Raw32(byte[] data, int offset) =>
+            offset < 0 || offset + 4 > data.Length ? "<out-of-range>" :
+                "0x" + ((uint)data[offset] | (uint)data[offset + 1] << 8 |
+                    (uint)data[offset + 2] << 16 | (uint)data[offset + 3] << 24).ToString("X8");
+
         private static Layout LoadLayout()
         {
             using (Stream stream = typeof(MsiMagB650SettingOrigins).Assembly.GetManifestResourceStream(LayoutResource))

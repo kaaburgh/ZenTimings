@@ -43,6 +43,47 @@ namespace ZenTimings.BiosOrigin
             }
         }
 
+        // Diagnostics only: explains selection without authorizing any badges or
+        // inferring that an unlisted firmware has compatible field offsets.
+        public static string DescribeSelection(string board, string biosVersion)
+        {
+            using (Stream stream = typeof(BiosOriginLayoutCatalog).Assembly.GetManifestResourceStream(ResourceName))
+            {
+                if (stream == null) return "catalog resource missing";
+                var serializer = new DataContractJsonSerializer(typeof(Catalog));
+                Catalog catalog = (Catalog)serializer.ReadObject(stream);
+                Validate(catalog);
+                List<LayoutEntry> boardMatches = catalog.Layouts
+                    .Where(layout => BoardMatches(layout, board)).ToList();
+                if (boardMatches.Count == 0)
+                    return "No board token matched; all offset probes are UNVERIFIED reference data.";
+                var versions = boardMatches.SelectMany(layout => layout.Releases
+                    .Where(r => VersionMatches(biosVersion, r.Version) ||
+                        (r.Aliases != null && r.Aliases.Any(a => VersionMatches(biosVersion, a))))
+                    .Select(r => new { Layout = layout, Release = r })).ToList();
+                if (versions.Count == 0)
+                {
+                    string known = string.Join(", ", boardMatches.SelectMany(l => l.Releases
+                        .Select(r => r.Version)).Distinct(StringComparer.OrdinalIgnoreCase));
+                    return "Board token matched: " +
+                        string.Join(", ", boardMatches.Select(l => l.Id)) +
+                        "; BIOS version is not registered (known: " + known +
+                        "); no setting-origin badges permitted.";
+                }
+                if (versions.Count != 1)
+                    return "Ambiguous layout candidates; no setting-origin badges permitted.";
+                var match = versions[0];
+                bool eligible = MayDisplayOrigins(match.Release.Status) &&
+                    (match.Layout.Resolver == "drfxi-dragonrange-v1" ||
+                     match.Layout.Resolver == "msi-mag-b650-raphael-v1e");
+                return "Board and release matched: " + match.Layout.Id +
+                    " / " + match.Release.Version + " (" + match.Release.Status +
+                    "); resolver: " + match.Layout.Resolver +
+                    (eligible ? "; candidate only — varstore fingerprint and IFR checks still required."
+                        : "; resolver or evidence tier not trusted; no badges permitted.");
+            }
+        }
+
         // Board names are token-matched rather than arbitrary substrings:
         // e.g. "NOTDRFXI" must never receive the DRFXI layout.
         private static bool BoardMatches(LayoutEntry entry, string board)

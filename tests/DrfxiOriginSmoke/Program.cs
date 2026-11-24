@@ -284,7 +284,7 @@ internal static class Program
             && report.Contains("Setup.base64: " + Convert.ToBase64String(setup))
             && report.Contains("AMD_PBS_SETUP.base64: " + Convert.ToBase64String(pbs)),
             "unknown firmware exports each successfully read variable independently");
-        Check(!report.Contains("AodSetupRpl.base64") && report.Contains("Win32 error 203")
+        Check(!report.Contains("AodSetupRpl.base64") && report.Contains("firmware variable is absent or is not runtime-visible (203)")
             && report.Contains("length: " + amd.Length) && report.Contains("SHA-256: "),
             "missing AOD records error while other variables include size and SHA-256");
         Check(report.Contains("CBS default header [+0,+4,+8]")

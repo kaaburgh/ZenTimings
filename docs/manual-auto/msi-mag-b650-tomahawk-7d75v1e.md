@@ -67,7 +67,7 @@ Evidence status: `derived` — extracted deterministically from the supplied BIO
 
 Fail-closed rules:
 
-- `AmdSetupRPL` must be readable and have exactly `0x779` bytes.
+- `AmdSetupRPL` must be readable and have exactly `0x779` bytes. Its first three u32 words (+0/+4/+8) must match the **all-zero values extracted from the NVAR StdDefaults** in both 1E5 and 1E0 (identical 1,913-byte bodies, SHA-256 `7eab1384a73dfb36159908a69e7c1e638dddddbfc2d323bebe7670ff075b747b`). These zeros are **not a unique signature**, nor has their runtime stability been validated; an unexpected header fails closed and the opt-in diagnostic captures its actual bytes.
 - `AodSetupRpl`, if readable, must have exactly `0x320` bytes; `Setup`, if readable, must match the **selected BIOS version**: `0x7C2` for 1E5 or `0x7C4` for 1E0.
 - Missing AOD or Setup data is not treated as Auto.
 - If both AMD CBS and AOD expose a Manual timing, the resolver reports unknown. AOD-over-CBS precedence is not assumed for this MSI BIOS.
@@ -79,12 +79,14 @@ This first resolver maps the timing controls and CBS Memory Target Speed only. F
 
 ## Hardware validation still required
 
-On a real MS-7D75 board running this BIOS, run ZenTimings as Administrator so the read-only UEFI API can enable `SeSystemEnvironmentPrivilege`:
+0. **First obtain the exact installed BIOS version**, either from the MSI BIOS screen or PowerShell `(Get-CimInstance Win32_BIOS).SMBIOSBIOSVersion`. Do not guess the version from the purchase date or flash the test BIOS.
+1. Run the test ZenTimings build as Administrator so the read-only UEFI API can enable `SeSystemEnvironmentPrivilege`. Take a screenshot of the main window.
+2. Open Debug, check **Include BIOS setup variables** **before generating the report**, then generate and save it. **Do this even if the installed BIOS is not 1.E0 or 1.E5**: the new diagnostic-only path records all four known UEFI varstores independently, including missing-variable errors, attributes, lengths, SHA-256, and reference probes. This path does not depend on a layout match and does not show Manual/Auto badges.
+3. If the BIOS is 1.E0 or 1.E5, verify the sizes of `AmdSetupRPL`, `AodSetupRpl`, and `Setup` (plus the presence or absence of `AMD_PBS_SETUP`). If the BIOS is newer, use the raw report to derive a **new** release-specific fingerprint — never alias an unknown version automatically.
+4. Compare the EXPO selector values with the MSI menu and running ZenTimings values. The MSI resolver **currently never emits `Auto` for unmatched memory timings or Speed** because the proprietary MSI OC paths remain unmapped. A `?` at stock/default settings is expected and does not mean a broken build.
+5. Optional follow-up for an experienced tester, **not required for the initial friend's run**: capture (a) BIOS defaults → `?`; (b) one known Manual timing in AMD Overclocking → expected `M·AOD` if its variable is available; (c) one Manual timing in **MSI OC → Advanced DRAM Configuration** → still `?`, then compare before/after `Setup` bytes to locate the vendor setting. Avoid changing timings on a production PC without a recovery plan.
+6. Do not promote either BIOS to `verified` until a real hardware variable readout and matching UI state are available.
 
-1. Confirm the exact `Win32_BaseBoard.Product` and `Win32_BIOS.SMBIOSBIOSVersion` strings used by catalog selection.
-2. Confirm whether Windows can read `AmdSetupRPL`, `AodSetupRpl`, and `Setup`, and confirm the three lengths.
-3. Compare the MSI EXPO selector raw values with the BIOS UI and a ZenTimings screenshot.
-4. Confirm the source classifications against a default/Auto configuration and, if possible, a known EXPO-enabled configuration.
-5. Do not upgrade this layout to `verified` until a real hardware variable readout and matching UI state are available.
+The opt-in report contains raw firmware configuration and can include system-specific settings. **Share it privately, not in a public PR comment.** No raw variables are read for this purpose or exported when the checkbox is off; no data is uploaded automatically. The captured MSI 1E0/1E5 raw offsets are explicitly marked *UNVERIFIED* for an unknown BIOS and are never interpreted as evidence that Manual/Auto applies.
 
 The PR adds this as a derived first-board implementation on top of Phase 2. It is a diagnostic build for collecting the first MSI hardware readout, not a claim that the MSI profile application path is fully understood.

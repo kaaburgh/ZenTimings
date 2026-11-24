@@ -81,7 +81,20 @@
           "name": "AmdSetupRPL",
           "guid": "3a997502-647a-4c82-998e-52ef9486a247",
           "size": 1913,
-          "headers": []
+          "headers": [
+            {
+              "offset": 0,
+              "u32": 0
+            },
+            {
+              "offset": 4,
+              "u32": 0
+            },
+            {
+              "offset": 8,
+              "u32": 0
+            }
+          ]
         },
         {
           "name": "AodSetupRpl",

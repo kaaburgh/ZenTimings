@@ -242,7 +242,8 @@ namespace ZenTimings.BiosOrigin
             if (setup != null)
             {
                 foreach (int offset in layout.SetupProfiles.AxmpOffsets)
-                    if (setup[offset] > 5) return "MSI A-XMP selector outside IFR options";
+                    if (setup[offset] != 0 && setup[offset] != 1 && setup[offset] != 2)
+                        return "MSI A-XMP selector outside IFR options {0,1,2}";
                 foreach (int offset in layout.SetupProfiles.ExpoOffsets)
                     if (setup[offset] > 3) return "MSI EXPO selector outside IFR options";
                 foreach (int offset in layout.SetupProfiles.MemoryTryItOffsets)

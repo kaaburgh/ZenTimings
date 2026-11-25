@@ -141,6 +141,63 @@ internal static class Program
             "ASRock unknown BIOS and other board rejected");
     }
 
+    private static void RunLenovoM75nTests()
+    {
+        const string board = "ThinkCentre M75n";
+        foreach (string version in new[] { "M33KT32A", "M33KT33A" })
+        {
+            var match = BiosOriginLayoutCatalog.Select(board,version);
+            Check(match != null && match.LayoutId == LenovoM75nSettingOrigins.LayoutId &&
+                match.Status == "derived" && match.ExpectedSize("AmdSetup") == 0x53F,
+                "Lenovo canonical release " + version);
+            byte[] amd = Enumerable.Repeat((byte)255,0x53F).ToArray(), setup = new byte[0x1C1];
+            foreach (int offset in new[]{0xA6,0xAA,0xAE,0xB3,0xB5,0xB7,0xBA,0xBD})
+                amd[offset]=0;
+            var report=LenovoM75nSettingOrigins.FromBlobs(amd,setup,match);
+            Check(report.IsMatched && report.Find("tCL").Source=="?", "DDR4 defaults remain unresolved");
+            amd[0xA1]=16; amd[0xA2]=18; amd[0xA3]=20;
+            Check(LenovoM75nSettingOrigins.FromBlobs(amd,setup,match).Find("tCL").Source=="?",
+                "DDR4 disabled OC gate ignores stale manual values");
+            amd[0x9F]=1; amd[0xA0]=36; amd[0xB7]=1; Set16(amd,0xB8,312);
+            amd[0xC2]=14; amd[0x14E]=0; amd[0x155]=1;
+            report=LenovoM75nSettingOrigins.FromBlobs(amd,setup,match);
+            Check(report.IsMatched && report.Find("tCL").StoredNumber==16 &&
+                report.Find("tCL").Source=="CBS", "DDR4 direct byte manual");
+            Check(report.Find("tRCDRD").StoredNumber==18 && report.Find("tRCDWR").StoredNumber==20,
+                "DDR4 separate RD/WR controls");
+            Check(report.Find("tRFC").StoredNumber==312 && report.Find("tRFC2").Source=="?",
+                "DDR4 u16 timing with separate manual gate");
+            Check(report.Find("Speed").StoredNumber==2400 && report.Find("MCLK").StoredNumber==1200 &&
+                report.Find("Speed").DiffersFrom("2400")==null, "DDR4 nominal enum clock, no mismatch claim");
+            Check(report.Find("Cmd2T").Stored=="1T" && report.Find("GDM").Stored=="Enabled",
+                "DDR4 independent mode selectors");
+            Check(LenovoM75nSettingOrigins.FromBlobs(amd,null,match).IsMatched,
+                "Lenovo optional native Setup unavailable");
+            Check(!LenovoM75nSettingOrigins.FromBlobs(amd,new byte[1],match).IsMatched &&
+                !LenovoM75nSettingOrigins.FromBlobs(new byte[0x6D6],setup,match).IsMatched,
+                "Lenovo wrong variable sizes rejected");
+            amd[0xC2]=13;
+            Check(!LenovoM75nSettingOrigins.FromBlobs(amd,setup,match).IsMatched,"DDR4 noncontiguous tCWL options");
+            amd[0xC2]=14; amd[0xA0]=37;
+            Check(!LenovoM75nSettingOrigins.FromBlobs(amd,setup,match).IsMatched,"DDR4 undefined clock code");
+            amd[0xA0]=36;
+            string raw="AmdSetup.base64: "+Convert.ToBase64String(amd)+"\n";
+            Check(DrfxiSettingOrigins.FromDebugReport(board,version,raw).Find("tCL").StoredNumber==16,
+                "DDR4 offline replay");
+            Check(DrfxiSettingOrigins.FromDebugReport("numeric OEM board",version,
+                "Resolver board (systemInfo.MbName): ThinkCentre M75n\n"+raw).IsMatched,
+                "DDR4 offline recorded identity fallback");
+            Check(!DrfxiSettingOrigins.FromDebugReport("numeric OEM board",version,raw).IsMatched,
+                "DDR4 no version-only offline match");
+            Check(LenovoM75nSettingOrigins.DescribeRawOffsets(amd).Any(x=>x.Contains("tCL[0xA1]=16")),
+                "DDR4 raw byte probe");
+        }
+        Check(BiosOriginLayoutCatalog.Select(board,"M33KT24A")==null &&
+            BiosOriginLayoutCatalog.Select(board,"M33KT33AB")==null &&
+            BiosOriginLayoutCatalog.Select("Other board","M33KT33A")==null,
+            "Lenovo exact board and release required");
+    }
+
     private static void RunMsiMagB650Tests()
     {
         var catalog = BiosOriginLayoutCatalog.Select(
@@ -362,8 +419,8 @@ internal static class Program
             });
         string report = string.Join("\n", lines);
         Check(attempted.SequenceEqual(new[]
-            { "AmdSetupRPL", "AodSetupRpl", "Setup", "AMD_PBS_SETUP" }),
-            "unknown firmware captures all four variables without stopping on missing AOD");
+            { "AmdSetupRPL", "AmdSetup", "AodSetupRpl", "Setup", "AMD_PBS_SETUP" }),
+            "unknown firmware captures all five variables without stopping on missing AOD");
         Check(report.Contains("not registered") && report.Contains("RAW EVIDENCE ONLY")
             && report.Contains("UNVERIFIED"),
             "unmatched catalog is explicitly marked as non-authoritative evidence");
@@ -396,7 +453,7 @@ internal static class Program
                 if (name == "AmdSetupRPL") throw new InvalidOperationException("injected fault");
                 return new FirmwareVariableProbeResult { Bytes = new byte[4], Attributes = 7 };
             });
-        Check(attempted.Count == 4 && string.Join("\n", recovered).Contains("injected fault")
+        Check(attempted.Count == 5 && string.Join("\n", recovered).Contains("injected fault")
             && string.Join("\n", recovered).Contains("AodSetupRpl.base64: "),
             "an exception in the first varstore read does not suppress later reads");
 
@@ -680,6 +737,7 @@ internal static class Program
 
         RunMsiMagB650Tests();
         RunAsrockSteelLegendTests();
+        RunLenovoM75nTests();
         RunDiagnosticCaptureTests();
 
         Console.WriteLine("OK: " + tests + " BIOS setting-origin and BIOS debug assertions");

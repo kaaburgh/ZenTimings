@@ -77,7 +77,7 @@ internal static class Program
                 Check(c.Timings[p.Key]==p.Value,"M75n "+p.Key);
         }
     }
-    // Selected words from the two gzip-validated M75n PM Table captures.
+    // Selected words from three gzip-validated M75n PM Table captures.
     // No complete telemetry dump is committed.
     private static void PowerTableCaptures()
     {
@@ -100,6 +100,12 @@ internal static class Program
         Check(Math.Abs(q.fclk_mhz-565.1662f)<0.001f && q.fclk_mhz==q.uclk_mhz,"PM capture 2 FCLK/UCLK");
         Check(Math.Abs(q.mclk_mhz-841.2141f)<0.001f && Math.Abs(q.vsoc_v-0.726607f)<0.00001f,"PM capture 2 MCLK/VSOC");
         Check(Math.Abs(p.cldo_vddp_v-0.8f)<0.00001f && p.cldo_vddp_v==q.cldo_vddp_v,"PM VDDP");
+        // STREAM x4: amdgpu reported the 1200 MHz DPM state immediately
+        // before and after capture. SMU clock telemetry was lower.
+        var loaded=Decode(Make(0x443446A3,0x4468CBDE,0x3F4B13D3));
+        Check(Math.Abs(loaded.fclk_mhz-721.1037f)<0.001f && loaded.fclk_mhz==loaded.uclk_mhz,"PM STREAM FCLK/UCLK");
+        Check(Math.Abs(loaded.mclk_mhz-931.1854f)<0.001f && Math.Abs(loaded.vsoc_v-0.79327124f)<0.00001f,"PM STREAM MCLK/VSOC");
+        Check(loaded.mclk_mhz>q.mclk_mhz && loaded.mclk_mhz<1200 && loaded.vsoc_v>q.vsoc_v,"PM STREAM telemetry differs from selected DPM state");
         Fails<NotSupportedException>(()=>Decode(a,version:0x1E0005),"unknown PM version rejected");
         Fails<NotSupportedException>(()=>Decode(a,driver:"0.1.3"),"unknown driver rejected");
         Fails<NotSupportedException>(()=>Decode(a,size:0x608),"unknown PM size rejected");

@@ -7,4 +7,8 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <Import Project="../SharedBiosOrigin.props" />
+  <ItemGroup>
+    <Compile Include="../../ZenStates-Core/Dictionaries/DDR4Dictionary.cs" Link="Upstream/DDR4Dictionary.cs" />
+    <Compile Include="../../ZenStates-Core/Dictionaries/DDR5Dictionary.cs" Link="Upstream/DDR5Dictionary.cs" />
+  </ItemGroup>
 </Project>

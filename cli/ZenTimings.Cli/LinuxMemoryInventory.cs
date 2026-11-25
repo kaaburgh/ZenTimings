@@ -48,7 +48,7 @@ namespace ZenTimings.Cli
             if(!d.IsValid || !d.BaseCrcValid) return null;
             bool timing=b[17]==0;
             var profiles=full && d.HasXmp?d.XmpProfiles.Where(x=>x!=null && x.IsValid)
-                .Select(x=>new XmpProfile(x.ProfileNumber,Positive(x.SpeedMTs),Positive(x.VddMv),Positive(x.tCKAVGminPs),
+                .Select(x=>new XmpProfile(x.ProfileNumber,Positive((int)Math.Round(x.ClockMHz*2)),Positive(x.VddMv),Positive(x.tCKAVGminPs),
                     PositiveTimings(("tCL",x.CL),("tRCD",x.tRCD),("tRP",x.tRP),("tRAS",x.tRAS),("tRC",x.tRC),
                         ("tRFC",x.tRFC1),("tRFC2",x.tRFC2),("tRFC4",x.tRFC4),("tFAW",x.tFAW),
                         ("tRRDS",x.tRRD_S),("tRRDL",x.tRRD_L),("tCCDL",x.tCCD_L)),
@@ -64,7 +64,7 @@ namespace ZenTimings.Cli
                 d.PrimaryBusWidthBits>0?d.BusWidthExtensionBits:null,Positive(d.DieDensityMbit),Positive(d.DieCount),
                 Positive(d.BankGroups),Positive(d.BanksPerGroup),Positive(d.RowBits),Positive(d.ColumnBits),
                 SafeText(d.PackageType),d.Is3DS,d.IsAsymmetric,d.HasThermalSensor,
-                timing?Positive(d.SpeedMTs):null,d.SupportedCLs?.ToArray()??Array.Empty<int>(),
+                timing?Positive((int)Math.Round(d.ClockMHz*2)):null,d.SupportedCLs?.ToArray()??Array.Empty<int>(),
                 timing?PositiveTimings(("tAA",d.tAAminPs),("tRCD",d.tRCDminPs),("tRP",d.tRPminPs),
                     ("tRAS",d.tRASminPs),("tRC",d.tRCminPs),("tRFC",d.tRFC1minPs),("tRFC2",d.tRFC2minPs),
                     ("tRFC4",d.tRFC4minPs),("tFAW",d.tFAWminPs),("tRRDS",d.tRRD_SminPs),

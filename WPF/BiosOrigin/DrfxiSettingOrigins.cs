@@ -30,6 +30,7 @@ namespace ZenTimings.BiosOrigin
                 {
                     case "AOD": return "M·AOD";
                     case "CBS": return "M·CBS";
+                    case "Setup": return "M·UEFI";
                     case "Auto": return "A";
                     case "AGESA": return "·";
                     default: return "?";
@@ -41,7 +42,7 @@ namespace ZenTimings.BiosOrigin
         // In particular, hardware impedance encodings and AGESA-computed timings are NOT comparable.
         public bool? DiffersFrom(string displayedValue, double mclk = 0)
         {
-            if ((Source != "AOD" && Source != "CBS") || !StoredNumber.HasValue)
+            if ((Source != "AOD" && Source != "CBS" && Source != "Setup") || !StoredNumber.HasValue)
                 return null;
 
             double expected = StoredNumber.Value;
@@ -83,7 +84,7 @@ namespace ZenTimings.BiosOrigin
         public string Tooltip(string displayedValue, double mclk = 0, string runningSource = null)
         {
             string tooltip = Details ?? "";
-            if (Source == "AOD" || Source == "CBS")
+            if (Source == "AOD" || Source == "CBS" || Source == "Setup")
             {
                 if (!string.IsNullOrWhiteSpace(Stored))
                     tooltip += "\nSaved: " + Stored;
@@ -332,7 +333,18 @@ namespace ZenTimings.BiosOrigin
             {
                 lines.Add("Catalog decision failed: " + ex.Message + "; no badges may be inferred.");
             }
-            lines.Add("Reference offsets below are from MSI 7D75v1E5/1E0 IFR.");
+            BiosOriginLayoutCatalog.BiosOriginCatalogMatch rawAsrockCandidate = null;
+            try
+            {
+                var candidate = BiosOriginLayoutCatalog.Select(board, biosVersion);
+                if (candidate != null && candidate.Resolver == AsrockSteelLegendSettingOrigins.Resolver)
+                    rawAsrockCandidate = candidate;
+            }
+            catch { /* Raw capture remains independent of catalog selection. */ }
+            lines.Add(rawAsrockCandidate == null
+                ? "Reference offsets below are from MSI 7D75v1E5/1E0 IFR."
+                : "Reference offsets: ASRock " + rawAsrockCandidate.ReleaseVersion +
+                    " Setup IFR; AMD reference probes below remain MSI 7D75v1E5/1E0 IFR.");
             lines.Add("UNVERIFIED — these offsets MUST NOT be interpreted as matching an unknown BIOS.");
 
             var varstores = new[]
@@ -369,9 +381,18 @@ namespace ZenTimings.BiosOrigin
                         .Replace("-", "").ToLowerInvariant());
                 try
                 {
-                    foreach (string line in MsiMagB650SettingOrigins.DescribeRawReferenceOffsets(
-                        variable.Name, probe.Bytes))
-                        lines.Add(line);
+                    if (rawAsrockCandidate != null && variable.Name == "Setup")
+                    {
+                        foreach (string line in AsrockSteelLegendSettingOrigins.DescribeRawSetupOffsets(
+                            probe.Bytes, rawAsrockCandidate))
+                            lines.Add(line);
+                    }
+                    else
+                    {
+                        foreach (string line in MsiMagB650SettingOrigins.DescribeRawReferenceOffsets(
+                            variable.Name, probe.Bytes))
+                            lines.Add(line);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -393,7 +414,8 @@ namespace ZenTimings.BiosOrigin
                     return Unavailable("No supported origin layout catalog entry for this board / BIOS.");
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
                     return Unavailable("AI-proposed origin layouts require maintainer verification before display.");
-                if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e")
+                if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e"
+                    && candidate.Resolver != AsrockSteelLegendSettingOrigins.Resolver)
                     return Unavailable("Origin layout has no trusted resolver: " + candidate.LayoutId);
                 if (Environment.OSVersion.Platform != PlatformID.Win32NT)
                     return Unavailable("Windows UEFI API is not available on this OS.");
@@ -432,7 +454,8 @@ namespace ZenTimings.BiosOrigin
                     return Unavailable("No supported origin layout for board / BIOS in debug report.");
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
                     return Unavailable("AI-proposed origin layouts are not trusted for offline display.");
-                if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e")
+                if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e"
+                    && candidate.Resolver != AsrockSteelLegendSettingOrigins.Resolver)
                     return Unavailable("Origin layout has no trusted offline resolver: " + candidate.LayoutId);
                 var blobs = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
                 foreach (var variable in candidate.Variables)
@@ -483,6 +506,13 @@ namespace ZenTimings.BiosOrigin
                 blobs.TryGetValue("AodSetupRpl", out aod);
                 blobs.TryGetValue("Setup", out setup);
                 resolved = MsiMagB650SettingOrigins.FromBlobs(blobs["AmdSetupRPL"], aod, setup, candidate);
+            }
+            else if (candidate.Resolver == AsrockSteelLegendSettingOrigins.Resolver)
+            {
+                byte[] aod, setup;
+                blobs.TryGetValue("AodSetupRpl", out aod);
+                blobs.TryGetValue("Setup", out setup);
+                resolved = AsrockSteelLegendSettingOrigins.FromBlobs(blobs["AmdSetupRPL"], aod, setup, candidate);
             }
             else
             {

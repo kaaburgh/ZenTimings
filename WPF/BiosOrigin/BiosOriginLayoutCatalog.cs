@@ -32,9 +32,9 @@ namespace ZenTimings.BiosOrigin
                 var candidates = catalog.Layouts
                     .Where(layout => BoardMatches(layout, board))
                     .SelectMany(layout => layout.Releases
-                        .Where(release => VersionMatches(biosVersion, release.Version)
+                        .Where(release => VersionMatches(layout, biosVersion, release.Version)
                             || (release.Aliases != null && release.Aliases.Any(a =>
-                                VersionMatches(biosVersion, a))))
+                                VersionMatches(layout, biosVersion, a))))
                         .Select(release => new BiosOriginCatalogMatch(layout, release)))
                     .ToList();
                 if (candidates.Count > 1)
@@ -58,8 +58,8 @@ namespace ZenTimings.BiosOrigin
                 if (boardMatches.Count == 0)
                     return "No board token matched; all offset probes are UNVERIFIED reference data.";
                 var versions = boardMatches.SelectMany(layout => layout.Releases
-                    .Where(r => VersionMatches(biosVersion, r.Version) ||
-                        (r.Aliases != null && r.Aliases.Any(a => VersionMatches(biosVersion, a))))
+                    .Where(r => VersionMatches(layout, biosVersion, r.Version) ||
+                        (r.Aliases != null && r.Aliases.Any(a => VersionMatches(layout, biosVersion, a))))
                     .Select(r => new { Layout = layout, Release = r })).ToList();
                 if (versions.Count == 0)
                 {
@@ -75,7 +75,8 @@ namespace ZenTimings.BiosOrigin
                 var match = versions[0];
                 bool eligible = MayDisplayOrigins(match.Release.Status) &&
                     (match.Layout.Resolver == "drfxi-dragonrange-v1" ||
-                     match.Layout.Resolver == "msi-mag-b650-raphael-v1e");
+                     match.Layout.Resolver == "msi-mag-b650-raphael-v1e" ||
+                      match.Layout.Resolver == AsrockSteelLegendSettingOrigins.Resolver);
                 return "Board and release matched: " + match.Layout.Id +
                     " / " + match.Release.Version + " (" + match.Release.Status +
                     "); resolver: " + match.Layout.Resolver +
@@ -94,9 +95,11 @@ namespace ZenTimings.BiosOrigin
                     + @"(?:$|[^a-zA-Z0-9])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
         }
 
-        private static bool VersionMatches(string running, string expected)
+        private static bool VersionMatches(LayoutEntry layout, string running, string expected)
         {
             if (string.IsNullOrWhiteSpace(running)) return false;
+            if (layout.Resolver == AsrockSteelLegendSettingOrigins.Resolver)
+                return string.Equals(running.Trim(), expected, StringComparison.OrdinalIgnoreCase);
             return Regex.IsMatch(running, @"(?:^|[^0-9.])" + Regex.Escape(expected)
                 + @"(?:$|[^0-9.])", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
         }

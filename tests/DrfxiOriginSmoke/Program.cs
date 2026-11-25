@@ -50,6 +50,97 @@ internal static class Program
         aod[0x97] = 0;
     }
 
+    private static void RunAsrockSteelLegendTests()
+    {
+        const string board = "X670E Steel Legend";
+        foreach (string version in new[] { "1.11", "1.11.AS01", "1.11.AS03", "1.21" })
+        {
+            bool newer = version == "1.21";
+            var match = BiosOriginLayoutCatalog.Select(board, version);
+            Check(match != null && match.LayoutId == AsrockSteelLegendSettingOrigins.LayoutId
+                && match.Status == "derived" && match.ReleaseVersion == version, "ASRock exact release " + version);
+            Check(BiosOriginLayoutCatalog.Select(board, "P" + version).ReleaseVersion == version,
+                "ASRock prefixed identity " + version);
+            byte[] amd = new byte[0x6D6], aod = new byte[newer ? 0x1AB : 0x1A8],
+                setup = new byte[newer ? 0x1EE : 0x1CE];
+            amd[0x116] = aod[0x3C] = 255;
+            int po = newer ? 0x1CE : 0x1B6;
+            setup[po] = (byte)(newer ? 0 : 255);
+            setup[po + 1] = 255;
+            int cl = newer ? 0x16C : 0x163;
+            int speed = newer ? 0x16A : 0x161;
+            var report = AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, setup, match);
+            Check(report.IsMatched && report.Find("tCL").Source == "?", "ASRock zero defaults remain unknown");
+            Set16(setup, cl, 36);
+            Set16(setup, speed, 6000);
+            Set16(setup, newer ? 0x17A : 0x16F, 480);
+            report = AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, setup, match);
+            Check(report.Find("tCL").Source == "Setup" && report.Find("tCL").StoredNumber == 36
+                && report.Find("tCL").Badge == "M·UEFI"
+                && report.Find("tCL").DiffersFrom("38") == true, "ASRock native tCL and mismatch");
+            Check(report.Find("tRFC").StoredNumber == 480 && report.Find("MCLK").DiffersFrom("3000") == false,
+                "ASRock version-specific refresh and speed offsets");
+            Check(report.Find("tRCDWR").Source == "?", "ASRock no unsupported native WR mapping");
+            Check(AsrockSteelLegendSettingOrigins.DescribeRawSetupOffsets(setup, match)
+                .Any(x => x.Contains("tCL [0x" + cl.ToString("X") + "]=36")),
+                "ASRock raw probes use the selected release offset");
+            Check(AsrockSteelLegendSettingOrigins.DescribeRawSetupOffsets(new byte[3], match)
+                .Single().Contains("unexpected Setup size"), "ASRock raw probe bounds guard");
+            Check(AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, null, match).Find("tCL").Source == "?",
+                "ASRock missing Setup is not Auto");
+            setup[po + 1] = 1;
+            Check(AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, setup, match).Find("tCL").Source == "?",
+                "ASRock performance preset makes attribution unresolved");
+            setup[po + 1] = 0;
+            Check(!AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, setup, match).IsMatched,
+                "ASRock invalid performance mode rejected");
+            setup[po + 1] = 255;
+            if (newer)
+            {
+                Set16(setup, 0x178, 32768);
+                report = AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, setup, match);
+                Check(report.Find("tREFI").Source == "Setup" && report.Find("tREFI").StoredNumber == 32768,
+                    "ASRock 1.21 native tREFI");
+            }
+            else Check(report.Find("tREFI").Source == "?", "ASRock 1.11 tREFI unsupported");
+            setup[po] = (byte)(newer ? 255 : 0);
+            Check(AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, setup, match).Find("tCL").Source == "?",
+                "ASRock reversed profile encoding must not alias Auto");
+            setup[po] = (byte)(newer ? 0 : 255);
+            amd[0x116] = 1; Set16(amd, 0x117, 6000);
+            amd[0x119] = 1; Set16(amd, 0x11A, 40);
+            Check(AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, setup, match).Find("tCL").Source == "?",
+                "ASRock native and CBS conflict");
+            Set16(setup, cl, 0);
+            Check(AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, setup, match).Find("tCL").Source == "CBS",
+                "ASRock single CBS manual path");
+            aod[0x3C] = 1; aod[0x3F] = 1; Set16(aod, 0x40, 36);
+            Check(AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, setup, match).Find("tCL").Source == "?",
+                "ASRock AMD menu conflict");
+            amd[0x116] = 255;
+            Check(AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, setup, match).Find("tCL").Source == "AOD",
+                "ASRock single AOD manual path");
+            Check(AsrockSteelLegendSettingOrigins.FromBlobs(amd, null, setup, match).Find("tCL").Source == "?",
+                "ASRock missing AOD is not Auto");
+            Check(!AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, new byte[newer ? 0x1CE : 0x1EE], match).IsMatched,
+                "ASRock cross-release Setup fingerprint rejected");
+            Check(!AsrockSteelLegendSettingOrigins.FromBlobs(amd, new byte[newer ? 0x1A8 : 0x1AB], setup, match).IsMatched,
+                "ASRock cross-release AOD fingerprint rejected");
+            string raw = "AmdSetupRPL.base64: " + Convert.ToBase64String(amd) + "\n"
+                + "AodSetupRpl.base64: " + Convert.ToBase64String(aod) + "\n"
+                + "Setup.base64: " + Convert.ToBase64String(setup) + "\n";
+            Check(DrfxiSettingOrigins.FromDebugReport(board, version, raw).Find("tCL").Source == "AOD",
+                "ASRock offline replay uses the same resolver");
+            amd[0] = 1;
+            Check(!AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, setup, match).IsMatched,
+                "ASRock wrong CBS header rejected");
+        }
+        Check(BiosOriginLayoutCatalog.Select(board, "1.11.AS02") == null
+            && BiosOriginLayoutCatalog.Select(board, "1.11.AS01A") == null
+            && BiosOriginLayoutCatalog.Select("X670E Taichi", "1.21") == null,
+            "ASRock unknown BIOS and other board rejected");
+    }
+
     private static void RunMsiMagB650Tests()
     {
         var catalog = BiosOriginLayoutCatalog.Select(
@@ -588,6 +679,7 @@ internal static class Program
             "loaded DDR4 APCB bytes preserve the original dump format");
 
         RunMsiMagB650Tests();
+        RunAsrockSteelLegendTests();
         RunDiagnosticCaptureTests();
 
         Console.WriteLine("OK: " + tests + " BIOS setting-origin and BIOS debug assertions");

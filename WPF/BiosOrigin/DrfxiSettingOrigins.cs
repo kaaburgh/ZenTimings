@@ -350,6 +350,7 @@ namespace ZenTimings.BiosOrigin
             var varstores = new[]
             {
                 new { Name = "AmdSetupRPL", Guid = "{3a997502-647a-4c82-998e-52ef9486a247}" },
+                new { Name = "AmdSetup", Guid = "{3a997502-647a-4c82-998e-52ef9486a247}" },
                 new { Name = "AodSetupRpl", Guid = "{5ed15dc0-edef-4161-9151-6014c4cc630c}" },
                 new { Name = "Setup", Guid = "{ec87d643-eba4-4bb5-a1e5-3f3e36b20da9}" },
                 new { Name = "AMD_PBS_SETUP", Guid = "{a339d746-f678-49b3-9fc7-54ce0f9df226}" }
@@ -415,7 +416,8 @@ namespace ZenTimings.BiosOrigin
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
                     return Unavailable("AI-proposed origin layouts require maintainer verification before display.");
                 if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e"
-                    && candidate.Resolver != AsrockSteelLegendSettingOrigins.Resolver)
+                    && candidate.Resolver != AsrockSteelLegendSettingOrigins.Resolver
+                    && candidate.Resolver != LenovoM75nSettingOrigins.Resolver)
                     return Unavailable("Origin layout has no trusted resolver: " + candidate.LayoutId);
                 if (Environment.OSVersion.Platform != PlatformID.Win32NT)
                     return Unavailable("Windows UEFI API is not available on this OS.");
@@ -455,7 +457,8 @@ namespace ZenTimings.BiosOrigin
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
                     return Unavailable("AI-proposed origin layouts are not trusted for offline display.");
                 if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e"
-                    && candidate.Resolver != AsrockSteelLegendSettingOrigins.Resolver)
+                    && candidate.Resolver != AsrockSteelLegendSettingOrigins.Resolver
+                    && candidate.Resolver != LenovoM75nSettingOrigins.Resolver)
                     return Unavailable("Origin layout has no trusted offline resolver: " + candidate.LayoutId);
                 var blobs = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
                 foreach (var variable in candidate.Variables)
@@ -513,6 +516,12 @@ namespace ZenTimings.BiosOrigin
                 blobs.TryGetValue("AodSetupRpl", out aod);
                 blobs.TryGetValue("Setup", out setup);
                 resolved = AsrockSteelLegendSettingOrigins.FromBlobs(blobs["AmdSetupRPL"], aod, setup, candidate);
+            }
+            else if (candidate.Resolver == LenovoM75nSettingOrigins.Resolver)
+            {
+                byte[] setup;
+                blobs.TryGetValue("Setup", out setup);
+                resolved = LenovoM75nSettingOrigins.FromBlobs(blobs["AmdSetup"], setup, candidate);
             }
             else
             {

@@ -197,6 +197,49 @@
           "optional": true
         }
       ]
+    },
+    {
+      "id": "lenovo-m75n-m33",
+      "resolver": "lenovo-m75n-raven-ddr4-v1",
+      "boardTokens": [
+        "ThinkCentre M75n",
+        "M75n"
+      ],
+      "releases": [
+        {
+          "version": "M33KT24A",
+          "status": "derived",
+          "fingerprintOverrides": [
+            {
+              "name": "Setup",
+              "size": 446
+            }
+          ]
+        },
+        {
+          "version": "M33KT32A",
+          "status": "derived"
+        },
+        {
+          "version": "M33KT33A",
+          "status": "derived"
+        }
+      ],
+      "variables": [
+        {
+          "name": "AmdSetup",
+          "guid": "3a997502-647a-4c82-998e-52ef9486a247",
+          "size": 1343,
+          "headers": []
+        },
+        {
+          "name": "Setup",
+          "guid": "ec87d643-eba4-4bb5-a1e5-3f3e36b20da9",
+          "size": 449,
+          "headers": [],
+          "optional": true
+        }
+      ]
     }
   ]
 }

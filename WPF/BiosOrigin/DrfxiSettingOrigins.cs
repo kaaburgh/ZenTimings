@@ -291,7 +291,7 @@ namespace ZenTimings.BiosOrigin
         {
             int privilege = Environment.OSVersion.Platform == PlatformID.Win32NT
                 ? EnablePrivilege() : 1;
-            return FormatFirmwareDiagnostics(board, biosVersion, boardVendor, biosVendor,
+            return FormatFirmwareDiagnostics(ResolveLiveBoardIdentity(board, biosVersion), biosVersion, boardVendor, biosVendor,
                 smbiosBoard, smbiosBiosVersion, agesa,
                 (name, guid) =>
                 {
@@ -318,7 +318,7 @@ namespace ZenTimings.BiosOrigin
             var lines = new List<string>();
             lines.Add("Capture: explicit user opt-in; read-only UEFI variables.");
             lines.Add("This section is RAW EVIDENCE ONLY: no Manual/Auto badges are derived from it.");
-            lines.Add("Resolver board (systemInfo.MbName): " + (board ?? "<unavailable>"));
+            lines.Add("Resolver board (systemInfo.MbName): " + (board ?? "<unavailable>")); // May use Lenovo system identity fallback.
             lines.Add("Resolver BIOS (systemInfo.BiosVersion): " + (biosVersion ?? "<unavailable>"));
             lines.Add("Win32_BaseBoard.Product: " + (smbiosBoard ?? "<unavailable>"));
             lines.Add("Win32_BaseBoard.Manufacturer: " + (boardVendor ?? "<unavailable>"));
@@ -350,6 +350,7 @@ namespace ZenTimings.BiosOrigin
             var varstores = new[]
             {
                 new { Name = "AmdSetupRPL", Guid = "{3a997502-647a-4c82-998e-52ef9486a247}" },
+                new { Name = "AmdSetup", Guid = "{3a997502-647a-4c82-998e-52ef9486a247}" },
                 new { Name = "AodSetupRpl", Guid = "{5ed15dc0-edef-4161-9151-6014c4cc630c}" },
                 new { Name = "Setup", Guid = "{ec87d643-eba4-4bb5-a1e5-3f3e36b20da9}" },
                 new { Name = "AMD_PBS_SETUP", Guid = "{a339d746-f678-49b3-9fc7-54ce0f9df226}" }
@@ -381,7 +382,12 @@ namespace ZenTimings.BiosOrigin
                         .Replace("-", "").ToLowerInvariant());
                 try
                 {
-                    if (rawAsrockCandidate != null && variable.Name == "Setup")
+                    if (variable.Name == "AmdSetup")
+                    {
+                        foreach (string line in LenovoM75nSettingOrigins.DescribeRawOffsets(probe.Bytes))
+                            lines.Add(line);
+                    }
+                    else if (rawAsrockCandidate != null && variable.Name == "Setup")
                     {
                         foreach (string line in AsrockSteelLegendSettingOrigins.DescribeRawSetupOffsets(
                             probe.Bytes, rawAsrockCandidate))
@@ -405,17 +411,43 @@ namespace ZenTimings.BiosOrigin
             return lines;
         }
 
+        // Lenovo SMBIOS BaseBoard.Product can be a numeric OEM ID, not M75n.
+        // Use system family/model only for the supported exact M33 releases; no fallback
+        // to firmware version alone. Registry is read-only and never used by offline replay.
+        private static string ResolveLiveBoardIdentity(string board, string biosVersion)
+        {
+            if (!LenovoM75nSettingOrigins.IsRelease(biosVersion) ||
+                Environment.OSVersion.Platform != PlatformID.Win32NT) return board;
+            try
+            {
+                using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\BIOS"))
+                {
+                    if (key == null) return board;
+                    string vendor = key.GetValue("SystemManufacturer") as string;
+                    string family = key.GetValue("SystemFamily") as string ?? "";
+                    string model = key.GetValue("SystemProductName") as string ?? "";
+                    if (string.Equals(vendor, "LENOVO", StringComparison.OrdinalIgnoreCase) &&
+                        (Regex.IsMatch(family, @"(?:^|[^a-zA-Z0-9])M75n(?:$|[^a-zA-Z0-9])", RegexOptions.IgnoreCase) ||
+                         Regex.IsMatch(model, @"^(11BS|11BT|11BU|11BV|11G4|11G5|11G6|11G7|11BW|11BX|11GW|11GX)[A-Z0-9]*$", RegexOptions.IgnoreCase)))
+                        return "ThinkCentre M75n";
+                }
+            }
+            catch { /* No identity inference if the registry cannot be read. */ }
+            return board;
+        }
+
         public static SettingOriginReport ReadFromFirmware(string board, string biosVersion)
         {
             try
             {
-                var candidate = BiosOriginLayoutCatalog.Select(board, biosVersion);
+                var candidate = BiosOriginLayoutCatalog.Select(ResolveLiveBoardIdentity(board, biosVersion), biosVersion);
                 if (candidate == null)
                     return Unavailable("No supported origin layout catalog entry for this board / BIOS.");
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
                     return Unavailable("AI-proposed origin layouts require maintainer verification before display.");
                 if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e"
-                    && candidate.Resolver != AsrockSteelLegendSettingOrigins.Resolver)
+                    && candidate.Resolver != AsrockSteelLegendSettingOrigins.Resolver
+                    && candidate.Resolver != LenovoM75nSettingOrigins.Resolver)
                     return Unavailable("Origin layout has no trusted resolver: " + candidate.LayoutId);
                 if (Environment.OSVersion.Platform != PlatformID.Win32NT)
                     return Unavailable("Windows UEFI API is not available on this OS.");
@@ -450,12 +482,21 @@ namespace ZenTimings.BiosOrigin
             try
             {
                 var candidate = BiosOriginLayoutCatalog.Select(board, biosVersion);
+                if (candidate == null && LenovoM75nSettingOrigins.IsRelease(biosVersion) && reportText != null)
+                {
+                    Match identity = Regex.Match(reportText,
+                        @"^Resolver board \(systemInfo\.MbName\):[ \t]*(ThinkCentre M75n)[ \t]*\r?$",
+                        RegexOptions.Multiline | RegexOptions.IgnoreCase);
+                    if (identity.Success)
+                        candidate = BiosOriginLayoutCatalog.Select(identity.Groups[1].Value, biosVersion);
+                }
                 if (candidate == null)
                     return Unavailable("No supported origin layout for board / BIOS in debug report.");
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
                     return Unavailable("AI-proposed origin layouts are not trusted for offline display.");
                 if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e"
-                    && candidate.Resolver != AsrockSteelLegendSettingOrigins.Resolver)
+                    && candidate.Resolver != AsrockSteelLegendSettingOrigins.Resolver
+                    && candidate.Resolver != LenovoM75nSettingOrigins.Resolver)
                     return Unavailable("Origin layout has no trusted offline resolver: " + candidate.LayoutId);
                 var blobs = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
                 foreach (var variable in candidate.Variables)
@@ -513,6 +554,12 @@ namespace ZenTimings.BiosOrigin
                 blobs.TryGetValue("AodSetupRpl", out aod);
                 blobs.TryGetValue("Setup", out setup);
                 resolved = AsrockSteelLegendSettingOrigins.FromBlobs(blobs["AmdSetupRPL"], aod, setup, candidate);
+            }
+            else if (candidate.Resolver == LenovoM75nSettingOrigins.Resolver)
+            {
+                byte[] setup;
+                blobs.TryGetValue("Setup", out setup);
+                resolved = LenovoM75nSettingOrigins.FromBlobs(blobs["AmdSetup"], setup, candidate);
             }
             else
             {

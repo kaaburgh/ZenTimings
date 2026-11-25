@@ -108,6 +108,7 @@
     <Compile Include="BiosOrigin\DrfxiSettingOrigins.cs" />
     <Compile Include="BiosOrigin\MsiMagB650SettingOrigins.cs" />
     <Compile Include="BiosOrigin\AsrockSteelLegendSettingOrigins.cs" />
+    <Compile Include="BiosOrigin\LenovoM75nSettingOrigins.cs" />
     <Compile Include="BiosOrigin\BiosOriginLayoutCatalog.cs" />
     <Compile Include="Windows\BiosMemoryControllerDebug.cs" />
     <Compile Include="Export\CoreOptionsScope.cs" />

@@ -76,7 +76,8 @@ namespace ZenTimings.BiosOrigin
                 bool eligible = MayDisplayOrigins(match.Release.Status) &&
                     (match.Layout.Resolver == "drfxi-dragonrange-v1" ||
                      match.Layout.Resolver == "msi-mag-b650-raphael-v1e" ||
-                      match.Layout.Resolver == AsrockSteelLegendSettingOrigins.Resolver);
+                      match.Layout.Resolver == AsrockSteelLegendSettingOrigins.Resolver ||
+                       match.Layout.Resolver == LenovoM75nSettingOrigins.Resolver);
                 return "Board and release matched: " + match.Layout.Id +
                     " / " + match.Release.Version + " (" + match.Release.Status +
                     "); resolver: " + match.Layout.Resolver +
@@ -98,7 +99,7 @@ namespace ZenTimings.BiosOrigin
         private static bool VersionMatches(LayoutEntry layout, string running, string expected)
         {
             if (string.IsNullOrWhiteSpace(running)) return false;
-            if (layout.Resolver == AsrockSteelLegendSettingOrigins.Resolver)
+            if (layout.Resolver == AsrockSteelLegendSettingOrigins.Resolver || layout.Resolver == LenovoM75nSettingOrigins.Resolver)
                 return string.Equals(running.Trim(), expected, StringComparison.OrdinalIgnoreCase);
             return Regex.IsMatch(running, @"(?:^|[^0-9.])" + Regex.Escape(expected)
                 + @"(?:$|[^0-9.])", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);

@@ -81,6 +81,20 @@ internal static class Program
             Check(report.Find("tRFC").StoredNumber == 480 && report.Find("MCLK").DiffersFrom("3000") == false,
                 "ASRock version-specific refresh and speed offsets");
             Check(report.Find("tRCDWR").Source == "?", "ASRock no unsupported native WR mapping");
+            Check(AsrockSteelLegendSettingOrigins.DescribeRawSetupOffsets(setup, match)
+                .Any(x => x.Contains("tCL [0x" + cl.ToString("X") + "]=36")),
+                "ASRock raw probes use the selected release offset");
+            Check(AsrockSteelLegendSettingOrigins.DescribeRawSetupOffsets(new byte[3], match)
+                .Single().Contains("unexpected Setup size"), "ASRock raw probe bounds guard");
+            Check(AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, null, match).Find("tCL").Source == "?",
+                "ASRock missing Setup is not Auto");
+            setup[po + 1] = 1;
+            Check(AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, setup, match).Find("tCL").Source == "?",
+                "ASRock performance preset makes attribution unresolved");
+            setup[po + 1] = 0;
+            Check(!AsrockSteelLegendSettingOrigins.FromBlobs(amd, aod, setup, match).IsMatched,
+                "ASRock invalid performance mode rejected");
+            setup[po + 1] = 255;
             if (newer)
             {
                 Set16(setup, 0x178, 32768);

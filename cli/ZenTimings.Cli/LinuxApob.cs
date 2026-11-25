@@ -21,7 +21,10 @@ namespace ZenTimings.Cli
         internal sealed record SpdSlot(uint instance,int socket,int channel,int dimm,LinuxMemoryInventory.Spd data);
         internal sealed record Result(bool available,string status,string source,string address,
             uint? version,uint? table_size,uint? header_size,Entry[] entries,Electrical[] electrical,
-            SpdSlot[] spd,string[] diagnostics,string note);
+            SpdSlot[] spd,string[] diagnostics,string note)
+        {
+            public string image_offset { get; init; }
+        }
         private const string Note="APOB is firmware boot/training data, not a live sensor. Layouts inherited from pinned ZenStates-Core; HMAC not verified. No raw bytes or serial numbers exported. No automatic UMC association.";
         private static uint U32(byte[] b,int o)=>BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(o,4));
 
@@ -139,6 +142,64 @@ namespace ZenTimings.Cli
             }
             catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
             { return Failure("offline file",new[]{ex.GetType().Name+": "+ex.Message}); }
+        }
+
+        // File-only SPI image search; no hardware or flash device access.
+        // A signature alone is not enough: require a complete contiguous entry
+        // chain and decodable electrical settings or a CRC-valid SPD record.
+        internal static Result ReadImage(string path)
+        {
+            const string source="offline SPI image (persisted firmware boot data)";
+            const int maxImage=64*1024*1024;
+            try
+            {
+                using var f=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read);
+                long length=f.Length;
+                if(length<16 || length>maxImage) throw new InvalidDataException("SPI image length outside 16 bytes..64 MiB.");
+                byte[] image=new byte[(int)length]; f.ReadExactly(image);
+                if(f.ReadByte()!=-1) throw new InvalidDataException("SPI image grew during read.");
+                var matches=new List<Result>(); int cursor=0, signatures=0;
+                while(cursor<=image.Length-16)
+                {
+                    int found=image.AsSpan(cursor).IndexOf("APOB"u8);
+                    if(found<0) break;
+                    int offset=cursor+found;
+                    cursor=offset+4;
+                    if(++signatures>4096) throw new InvalidDataException("Too many APOB signatures; image search aborted.");
+                    if(offset>image.Length-16) break;
+                    try
+                    {
+                        var h=Header(image.AsSpan(offset,16).ToArray());
+                        if(h.size>image.Length-offset) continue;
+                        byte[] b=image.AsSpan(offset,h.size).ToArray();
+                        // Strict chain walk, unlike recovery from a standalone
+                        // table: never interpret arbitrary embedded signatures.
+                        int p=h.header, n=0;
+                        while(p<b.Length)
+                        {
+                            if(b.Length-p<48 || ++n>4096) break;
+                            uint g=U32(b,p)&0xFFFF,t=U32(b,p+4)&0xFFFF,size=U32(b,p+12);
+                            if(g<1 || g>9 || t==0 || size<48 || size>b.Length-p) break;
+                            p+=(int)size;
+                        }
+                        if(p!=b.Length || n<2) continue;
+                        var parsed=Parse(b,source);
+                        if(parsed.entries.Length!=n || !(parsed.electrical.Any(c=>c.settings["ProcODT"].display!="N/A" &&
+                            c.settings["ProcODT"].code>0) || parsed.spd.Any(x=>x.data.base_crc_valid==true))) continue;
+                        matches.Add(parsed with { image_offset=$"0x{offset:X8}" });
+                        if(matches.Count>1)
+                            return Failure(source,new[]{"Multiple validated APOB tables; extract the intended complete table and use --apob-file."});
+                    }
+                    catch(Exception ex) when(ex is InvalidDataException || ex is ArgumentException || ex is OverflowException)
+                    { /* Reject malformed signature candidates, continue bounded search. */ }
+                }
+                if(matches.Count==0)
+                    return Failure(source,new[]{$"No complete supported APOB table with decoded memory evidence; {signatures} signature candidates examined."});
+                var result=matches[0];
+                return result with { diagnostics=result.diagnostics.Append($"Unique validated table; {signatures} signature candidates examined.").ToArray() };
+            }
+            catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException || ex is NotSupportedException)
+            { return Failure(source,new[]{ex.GetType().Name+": "+ex.Message}); }
         }
 
         internal sealed record Range(long start,long end,string name);

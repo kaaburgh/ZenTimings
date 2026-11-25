@@ -111,6 +111,29 @@ namespace ZenTimings.BiosOrigin
             return report;
         }
 
+        // Explicit opt-in diagnostics only; offsets are never used to infer badges here.
+        public static IEnumerable<string> DescribeRawSetupOffsets(byte[] bytes,
+            BiosOriginLayoutCatalog.BiosOriginCatalogMatch firmware)
+        {
+            if (bytes == null || firmware == null || firmware.Resolver != Resolver) yield break;
+            bool newer = firmware.ReleaseVersion == "1.21";
+            if (bytes.Length != firmware.ExpectedSize("Setup"))
+            {
+                yield return "  ASRock reference offsets omitted: unexpected Setup size.";
+                yield break;
+            }
+            int p = newer ? 0x1CE : 0x1B6, s = newer ? 0x16A : 0x161;
+            yield return "  ASRock profile[0x" + p.ToString("X") + "]=" + bytes[p] +
+                "; performance[0x" + (p + 1).ToString("X") + "]=" + bytes[p + 1];
+            yield return "  ASRock frequency[0x" + s.ToString("X") + "]=" + U16(bytes, s);
+            for (int i = 0; i < Rows.Length; i++)
+            {
+                int offset = NativeOffset(i, newer);
+                yield return "  ASRock " + Rows[i] + " [0x" + offset.ToString("X") + "]=" + U16(bytes, offset);
+            }
+            if (newer) yield return "  ASRock tREFI[0x178]=" + U16(bytes, 0x178);
+        }
+
         private static SettingOriginReport Reject(SettingOriginReport report, string reason)
         {
             report.IsMatched = false;

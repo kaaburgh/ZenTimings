@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using ZenStates.Core.Hardware.DRAM.DDR4.Spd;
 
 namespace ZenTimings.Cli
 {
@@ -15,7 +16,64 @@ namespace ZenTimings.Cli
             int? total_width_bits,uint? rated_mts,uint? configured_mts,int? configured_mv);
         internal sealed record Spd(string device,string driver,string status,int? bytes,string memory_type,
             string revision,bool? base_crc_valid,bool? module_crc_valid,string part_number,
-            string manufacturer_jep106,int? tck_min_ps,int? jedec_rate_from_tck_mts);
+            string manufacturer_jep106,int? tck_min_ps,int? jedec_rate_from_tck_mts)
+        {
+            public Ddr4Details ddr4 { get; init; }
+        }
+        internal sealed record XmpProfile(int profile_number,int? speed_mts,int? voltage_mv,int? tck_min_ps,
+            SortedDictionary<string,int> timings_clocks,SortedDictionary<string,int> timings_ps,int[] supported_cl);
+        internal sealed record Ddr4Details(string status,string module_type,string module_manufacturer,string dram_manufacturer,
+            long? capacity_mib,int? package_ranks,int? logical_ranks,int? device_width_bits,int? primary_bus_width_bits,
+            int? ecc_extension_bits,int? die_density_mbit,int? die_count,int? bank_groups,int? banks_per_group,
+            int? row_bits,int? column_bits,string package_type,bool is_3ds,bool is_asymmetric,bool has_thermal_sensor,
+            int? jedec_speed_mts,int[] supported_cl,SortedDictionary<string,int> jedec_min_ps,
+            SortedDictionary<string,int> jedec_timings_at_max_rate_clocks,string xmp_status,string xmp_revision,
+            XmpProfile[] xmp_profiles);
+        private static int? Positive(int x)=>x>0?x:null;
+        private static string SafeText(string x)=>string.IsNullOrWhiteSpace(x)?null:
+            new string(x.Trim().Select(c=>char.IsControl(c)?'?':c).ToArray());
+        private static SortedDictionary<string,int> PositiveTimings(params (string key,int value)[] values)
+        {
+            var r=new SortedDictionary<string,int>(StringComparer.Ordinal);
+            foreach(var p in values) if(p.value>0) r.Add(p.key,p.value);
+            return r;
+        }
+        private static Ddr4Details DecodeDdr4(byte[] b,bool? moduleCrc)
+        {
+            // Only full images are eligible for module-specific/XMP decoding.
+            // The upstream decoder pads shorter images; suppress derived fields
+            // outside the bytes we actually acquired.
+            bool full=b.Length==512 && moduleCrc==true;
+            var d=Ddr4SpdDecoder.Decode(b,!full);
+            if(!d.IsValid || !d.BaseCrcValid) return null;
+            bool timing=b[17]==0;
+            var profiles=full && d.HasXmp?d.XmpProfiles.Where(x=>x!=null && x.IsValid)
+                .Select(x=>new XmpProfile(x.ProfileNumber,Positive(x.SpeedMTs),Positive(x.VddMv),Positive(x.tCKAVGminPs),
+                    PositiveTimings(("tCL",x.CL),("tRCD",x.tRCD),("tRP",x.tRP),("tRAS",x.tRAS),("tRC",x.tRC),
+                        ("tRFC",x.tRFC1),("tRFC2",x.tRFC2),("tRFC4",x.tRFC4),("tFAW",x.tFAW),
+                        ("tRRDS",x.tRRD_S),("tRRDL",x.tRRD_L),("tCCDL",x.tCCD_L)),
+                    PositiveTimings(("tAA",x.tAAminPs),("tRCD",x.tRCDminPs),("tRP",x.tRPminPs),
+                        ("tRAS",x.tRASminPs),("tRC",x.tRCminPs),("tRFC",x.tRFC1minPs),("tRFC2",x.tRFC2minPs),
+                        ("tRFC4",x.tRFC4minPs),("tFAW",x.tFAWminPs),("tRRDS",x.tRRD_SminPs),
+                        ("tRRDL",x.tRRD_LminPs),("tCCDL",x.tCCD_LminPs)),x.SupportedCLs?.ToArray()??Array.Empty<int>()))
+                .ToArray():Array.Empty<XmpProfile>();
+            return new Ddr4Details(full?"full image; upstream decoder":"base fields only; module/XMP not verified",
+                SafeText(d.ModuleTypeString),b.Length>=322?SafeText(d.ModuleManufacturer):null,
+                b.Length>=352?SafeText(d.DramManufacturer):null,d.TotalCapacityMB>0?d.TotalCapacityMB:null,
+                Positive(d.PackageRanks),Positive(d.LogicalRanks),Positive(d.DeviceWidthBits),Positive(d.PrimaryBusWidthBits),
+                d.PrimaryBusWidthBits>0?d.BusWidthExtensionBits:null,Positive(d.DieDensityMbit),Positive(d.DieCount),
+                Positive(d.BankGroups),Positive(d.BanksPerGroup),Positive(d.RowBits),Positive(d.ColumnBits),
+                SafeText(d.PackageType),d.Is3DS,d.IsAsymmetric,d.HasThermalSensor,
+                timing?Positive(d.SpeedMTs):null,d.SupportedCLs?.ToArray()??Array.Empty<int>(),
+                timing?PositiveTimings(("tAA",d.tAAminPs),("tRCD",d.tRCDminPs),("tRP",d.tRPminPs),
+                    ("tRAS",d.tRASminPs),("tRC",d.tRCminPs),("tRFC",d.tRFC1minPs),("tRFC2",d.tRFC2minPs),
+                    ("tRFC4",d.tRFC4minPs),("tFAW",d.tFAWminPs),("tRRDS",d.tRRD_SminPs),
+                    ("tRRDL",d.tRRD_LminPs),("tCCDL",d.tCCD_LminPs),("tWR",d.tWRminPs),
+                    ("tWTRS",d.tWTR_SminPs),("tWTRL",d.tWTR_LminPs)):null,
+                timing?PositiveTimings(("tCL",d.CL),("tRCD",d.tRCD),("tRP",d.tRP),("tRAS",d.tRAS),("tRC",d.tRC)):null,
+                !full?"unavailable: incomplete image or invalid module CRC":d.HasXmp?"present (upstream decoded)":"not present",
+                full?SafeText(d.XmpRevision):null,profiles);
+        }
         internal sealed record Result(string smbios_status,Module[] modules,string spd_status,Spd[] spd,
             string note);
 
@@ -141,8 +199,19 @@ namespace ZenTimings.Cli
             if(b.Length>=mfg+2 && (b[mfg+1]&0x7F)!=0 && (b[mfg+1]&0x7F)!=0x7F)
                 id=$"{b[mfg]&0x7F:X2}:{b[mfg+1]&0x7F:X2}";
             int? rate=tck>0?(int)Math.Round(2000000.0/tck):null;
-            return new Spd(device,driver,"base CRC valid; partial field decode",b.Length,type,
+            var result=new Spd(device,driver,"base CRC valid; partial field decode",b.Length,type,
                 $"{b[1]>>4}.{b[1]&15}",true,moduleCrc,pn,id,tck>0?tck:null,rate);
+            if(ddr4)
+            {
+                try
+                {
+                    var details=DecodeDdr4(b,moduleCrc);
+                    if(details!=null) result=result with { status="base CRC valid; DDR4 decoded",ddr4=details };
+                }
+                catch(Exception ex) when(ex is ArgumentException || ex is IndexOutOfRangeException || ex is OverflowException)
+                { result=result with { status="base CRC valid; extended DDR4 decode failed: "+ex.GetType().Name }; }
+            }
+            return result;
         }
 
         internal static Result Capture(string sysRoot)

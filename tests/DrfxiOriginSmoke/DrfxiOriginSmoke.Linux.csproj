@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <Import Project="../../cli/SharedBiosOrigin.props" />
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="../../WPF/Windows/BiosMemoryControllerDebug.cs" Link="BiosMemoryControllerDebug.cs" />
+  </ItemGroup>
+</Project>

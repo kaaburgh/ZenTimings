@@ -333,7 +333,18 @@ namespace ZenTimings.BiosOrigin
             {
                 lines.Add("Catalog decision failed: " + ex.Message + "; no badges may be inferred.");
             }
-            lines.Add("Reference offsets below are from MSI 7D75v1E5/1E0 IFR.");
+            BiosOriginLayoutCatalog.BiosOriginCatalogMatch rawAsrockCandidate = null;
+            try
+            {
+                var candidate = BiosOriginLayoutCatalog.Select(board, biosVersion);
+                if (candidate != null && candidate.Resolver == AsrockSteelLegendSettingOrigins.Resolver)
+                    rawAsrockCandidate = candidate;
+            }
+            catch { /* Raw capture remains independent of catalog selection. */ }
+            lines.Add(rawAsrockCandidate == null
+                ? "Reference offsets below are from MSI 7D75v1E5/1E0 IFR."
+                : "Reference offsets: ASRock " + rawAsrockCandidate.ReleaseVersion +
+                    " Setup IFR; AMD reference probes below remain MSI 7D75v1E5/1E0 IFR.");
             lines.Add("UNVERIFIED — these offsets MUST NOT be interpreted as matching an unknown BIOS.");
 
             var varstores = new[]
@@ -370,9 +381,18 @@ namespace ZenTimings.BiosOrigin
                         .Replace("-", "").ToLowerInvariant());
                 try
                 {
-                    foreach (string line in MsiMagB650SettingOrigins.DescribeRawReferenceOffsets(
-                        variable.Name, probe.Bytes))
-                        lines.Add(line);
+                    if (rawAsrockCandidate != null && variable.Name == "Setup")
+                    {
+                        foreach (string line in AsrockSteelLegendSettingOrigins.DescribeRawSetupOffsets(
+                            probe.Bytes, rawAsrockCandidate))
+                            lines.Add(line);
+                    }
+                    else
+                    {
+                        foreach (string line in MsiMagB650SettingOrigins.DescribeRawReferenceOffsets(
+                            variable.Name, probe.Bytes))
+                            lines.Add(line);
+                    }
                 }
                 catch (Exception ex)
                 {

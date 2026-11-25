@@ -54,8 +54,17 @@ internal static class Program
             [0x50254]=0x06040008,[0x50260]=0x3049C9A5,[0x50264]=0x21060138,
             [0x50DF0]=0x00020024
         };
+        // Extended live snapshot, same firmware and timings, both UMCs.
+        var extraBank = new Dictionary<uint,uint> {
+            [0x50050]=0xBA954321,[0x50058]=0x87654321,[0x500D0]=0x24924001,[0x500D4]=0,
+            [0x5021C]=0x00000800,[0x5022C]=0x09320080,[0x50234]=0x18101808,
+            [0x50238]=0x030001B1,[0x5023C]=0x00002024,[0x50244]=0x3F310006,
+            [0x50250]=0x00090000,[0x50258]=0x0214070C,[0x5025C]=0x22002A2A,
+            [0x5028C]=0x18002980,[0x502A4]=0,[0x50DF4]=0x00000024
+        };
         var raw = new Dictionary<uint,uint>();
         foreach(var p in bank) { raw.Add(p.Key,p.Value); raw.Add(p.Key|0x100000,p.Value); }
+        foreach(var p in extraBank) { raw.Add(p.Key,p.Value); raw.Add(p.Key|0x100000,p.Value); }
         var expected = new Dictionary<string,uint> {
             ["Cmd2T"]=0,["GDM"]=0,["PwrDwn"]=1,["tCKE"]=6,["tCL"]=17,["tCWL"]=12,
             ["tFAW"]=36,["tRAS"]=39,["tRC"]=56,["tRCDRD"]=17,["tRCDWR"]=17,
@@ -75,6 +84,33 @@ internal static class Program
                 Check(c.Registers[$"0x{(p.Key|((uint)i<<20)):X8}"]==$"0x{p.Value:X8}","M75n register "+p.Key.ToString("X"));
             foreach(var p in expected)
                 Check(c.Timings[p.Key]==p.Value,"M75n "+p.Key);
+        }
+        var extended=RunningTimings.Capture(new("AuthenticAMD",0x17,0x18),a=>raw[a],"M75n extended capture",true);
+        var extraExpected=new Dictionary<string,uint> {
+            ["AggrPwrDownDly"]=31,["AggrPwrDownEn"]=1,["AlertCrcDly"]=36,["AlertParDly"]=32,
+            ["BGS"]=1,["BGSAlt"]=0,["BankGroupEn"]=1,["BurstCtrl"]=0,["BurstLength"]=2,
+            ["CPDED"]=4,["CmdParLatency"]=0,["CmdStgCnt"]=5,["DLLK"]=768,["DdrMaxRate"]=36,
+            ["DdrMaxRateEnf"]=36,["DimmEccEn"]=0,["FGR"]=0,["LpDly"]=42,["LpExitDly"]=42,
+            ["MOD"]=24,["MODPDA"]=24,["MRD"]=8,["MRDPDA"]=16,["PARINL"]=0,["PD"]=6,
+            ["PHYRDL"]=20,["PHYWRD"]=2,["PHYWRL"]=7,["PowerDownMode"]=1,["Preamble2t"]=0,
+            ["PwrDownDly"]=152,["RDDATAEN"]=12,["RDPRE"]=0,["RDRDBan"]=0,["RankBusyDly"]=0,
+            ["RcvrWait"]=384,["STAG"]=9,["ShortInit"]=0,["TRCPAGE"]=0,["TgearHold"]=2,
+            ["TgearSetup"]=2,["TzqOperCal"]=512,["Tzqcs"]=128,["WRMPR"]=24,["WRPRE"]=0,
+            ["WRWRBan"]=0,["XP"]=8,["XS"]=433,["ZqcsInterval"]=147
+        };
+        Check(extended.Channels.Length==2,"M75n extended both channels");
+        foreach(var c in extended.Channels)
+        {
+            var x=c.Extended;
+            Check(x.status=="complete" && x.unavailable.Count==0,"M75n extended read complete");
+            Check(x.registers.Count==23 && x.fields.Count==49,"M75n extended counts");
+            foreach(var p in extraBank)
+                Check(x.registers[$"0x{(p.Key|((uint)c.Index<<20)):X8}"]==$"0x{p.Value:X8}","M75n extended raw word");
+            foreach(var p in extraExpected) Check(x.fields[p.Key]==p.Value,"M75n extended "+p.Key);
+            foreach(var p in expected) Check(c.Timings[p.Key]==p.Value,"M75n basic unchanged "+p.Key);
+            Check(x.refresh_mode=="normal" && x.fgr_multiplier==1 && x.fgr_on_the_fly==false &&
+                Math.Abs(x.nominal_effective_trfc_ns.Value-350.8333333333333)<0.0001 && x.nitro==null,
+                "M75n normal refresh nominal duration");
         }
     }
     // Selected words from three gzip-validated M75n PM Table captures.

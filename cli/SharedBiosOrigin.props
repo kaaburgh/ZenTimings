@@ -1,0 +1,10 @@
+<Project>
+  <!-- Compile the exact same sources and embedded resources as the legacy WPF app.
+       No ZenStates-Core, WPF, NuGet packages or duplicated firmware tables. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)../WPF/BiosOrigin/*.cs" Link="BiosOrigin/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)../WPF/Resources/BiosLayouts/*.json">
+      <LogicalName>ZenTimings.Resources.BiosLayouts.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+</Project>

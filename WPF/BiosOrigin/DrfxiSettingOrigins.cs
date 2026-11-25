@@ -412,7 +412,7 @@ namespace ZenTimings.BiosOrigin
         }
 
         // Lenovo SMBIOS BaseBoard.Product can be a numeric OEM ID, not M75n.
-        // Use system family/model only for the two exact M33 releases; no fallback
+        // Use system family/model only for the supported exact M33 releases; no fallback
         // to firmware version alone. Registry is read-only and never used by offline replay.
         private static string ResolveLiveBoardIdentity(string board, string biosVersion)
         {

@@ -15,7 +15,7 @@ namespace ZenTimings.Cli
             int? total_width_bits,uint? rated_mts,uint? configured_mts,int? configured_mv);
         internal sealed record Spd(string device,string driver,string status,int? bytes,string memory_type,
             string revision,bool? base_crc_valid,bool? module_crc_valid,string part_number,
-            string manufacturer_jep106,int? tck_min_ps,int? jedec_max_mts);
+            string manufacturer_jep106,int? tck_min_ps,int? jedec_rate_from_tck_mts);
         internal sealed record Result(string smbios_status,Module[] modules,string spd_status,Spd[] spd,
             string note);
 
@@ -63,7 +63,7 @@ namespace ZenTimings.Cli
                     {
                         ulong? bytes=size switch {
                             0xFFFF=>null,
-                            0x7FFF=>D(0x1C)==0?null:(ulong?)(D(0x1C)&0x7FFFFFFF)*1024*1024,
+                            0x7FFF=>(D(0x1C)&0x7FFFFFFF)==0?null:(ulong?)(D(0x1C)&0x7FFFFFFF)*1024*1024,
                             _=>(ulong)(size&0x7FFF)*((size&0x8000)!=0?1024UL:1048576UL)
                         };
                         uint? Speed(int o,int ext)
@@ -79,7 +79,7 @@ namespace ZenTimings.Cli
                         string form=B(0x0E) switch {0x09=>"DIMM",0x0D=>"SODIMM",0x10=>"Die",_=>$"0x{B(0x0E):X2}"};
                         result.Add(new Module(Str(0x10),Str(0x11),Str(0x17),Str(0x1A),memory,form,
                             bytes,rank==0?null:rank,Width(0x0A),Width(0x08),Speed(0x15,0x54),
-                            Speed(0x20,0x58),W(0x26)==0?null:W(0x26)));
+                            Speed(0x20,0x58),W(0x26) is 0 or 0xFFFF?null:W(0x26)));
                     }
                 }
                 p=q+2;
@@ -153,7 +153,7 @@ namespace ZenTimings.Cli
                 modules=ParseDmi(ReadBounded(Path.Combine(sysRoot,"firmware/dmi/tables/DMI"),4*1024*1024));
                 dmiStatus=modules.Length>0?"available":"no populated Type 17 records";
             }
-            catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException)
+            catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
             { dmiStatus=ex.GetType().Name+": "+ex.Message; }
             var spd=new List<Spd>(); string spdStatus;
             try
@@ -173,13 +173,13 @@ namespace ZenTimings.Cli
                         var b=ReadBounded(Path.Combine(path,"eeprom"),driver=="ee1004"?512:1024);
                         spd.Add(ParseSpd(name,driver,b));
                     }
-                    catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException)
+                    catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
                     { spd.Add(new Spd(name,driver,ex.GetType().Name+": "+ex.Message,null,null,null,null,null,null,null,null,null)); }
                 }
                 spdStatus=spd.Count==0?"no bound SPD EEPROM devices exposed":spd.Any(x=>x.base_crc_valid==true)?
                     "available (check per-device status)":"bound devices found but no valid SPD";
             }
-            catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException)
+            catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
             { spdStatus=ex.GetType().Name+": "+ex.Message; }
             return new Result(dmiStatus,modules,spdStatus,spd.ToArray(),
                 "SMBIOS values are firmware-reported, not live sensor readings. SPD and DMI entries are not automatically matched to physical UMCs. No serials or raw bytes exported; no bus scans.");

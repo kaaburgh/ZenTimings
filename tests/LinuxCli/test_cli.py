@@ -132,6 +132,103 @@ class CliTest(unittest.TestCase):
         self.write("Setup", SETUP, setup[:-1])
         self.assertFalse(self.result(code=1)["matched"])
 
+    def test_memory_inventory(self):
+        import binascii
+        import struct
+
+        def dimm(handle, size, loc, memory=0x1a, length=0x28):
+            b = bytearray(length)
+            b[:4] = bytes((17, length)) + struct.pack("<H", handle)
+            for off, value in ((8, 64), (10, 64), (12, size), (0x15, 2667),
+                               (0x20, 2400), (0x26, 1200)):
+                if off+2 <= length:
+                    struct.pack_into("<H", b, off, value)
+            b[0xe] = 0x0d
+            b[0x10:0x12] = bytes((1, 2))
+            b[0x12] = memory
+            b[0x17:0x1b] = bytes((3, 4, 5, 6))
+            b[0x1b] = 1
+            return b + b"\x00".join([loc.encode(), b"BANK", b"Micron", b"PRIVATE-SERIAL",
+                                      b"PRIVATE-ASSET", b"4ATF51264HZ-2G6E1"]) + b"\x00\x00"
+
+        table = self.root / "firmware/dmi/tables/DMI"
+        table.parent.mkdir(parents=True)
+        end = bytes((127, 4, 0xff, 0xff, 0, 0))
+        table.write_bytes(dimm(1, 4096, "DIMM 0") + dimm(2, 4096, "DIMM 1") +
+                          dimm(3, 0, "EMPTY") + end)
+        bus = self.root / "bus/i2c/devices"
+        bus.mkdir(parents=True)
+        def inventory(code=0):
+            out = self.invoke("--modules", "--json", code=code).stdout
+            self.assertNotIn("PRIVATE-SERIAL", out)
+            self.assertNotIn("PRIVATE-ASSET", out)
+            return json.loads(out)["memory_inventory"]
+
+        inv = inventory()
+        self.assertEqual(inv["smbios_status"], "available")
+        self.assertEqual(len(inv["modules"]), 2)
+        for m in inv["modules"]:
+            self.assertEqual(m["capacity_bytes"], 4*1024**3)
+            self.assertEqual(m["ranks"], 1)
+            self.assertEqual(m["memory_type"], "DDR4")
+            self.assertEqual(m["form_factor"], "SODIMM")
+            self.assertEqual(m["rated_mts"], 2667)
+            self.assertEqual(m["configured_mts"], 2400)
+            self.assertEqual(m["configured_mv"], 1200)
+            self.assertEqual(m["part_number"], "4ATF51264HZ-2G6E1")
+        self.assertEqual(inv["spd"], [])
+        self.assertIn("no bound SPD", inv["spd_status"])
+
+        def spd_device(name, driver, data):
+            p = bus / name
+            p.mkdir()
+            target = self.root / "bus/i2c/drivers" / driver
+            target.mkdir(parents=True, exist_ok=True)
+            (p / "driver").symlink_to(target, target_is_directory=True)
+            (p / "eeprom").write_bytes(data)
+            return p / "eeprom"
+
+        d4 = bytearray(512)
+        d4[1:3] = bytes((0x11, 0x0c))
+        d4[18] = 6
+        d4[320:322] = bytes((0, 0x2c))
+        d4[329:349] = b"TEST-DDR4".ljust(20)
+        d4[325:329] = b"ABCD"
+        struct.pack_into("<H", d4, 126, binascii.crc_hqx(d4[:126], 0))
+        struct.pack_into("<H", d4, 254, binascii.crc_hqx(d4[128:254], 0))
+        e4 = spd_device("1-0050", "ee1004", d4)
+        d5 = bytearray(1024)
+        d5[1:3] = bytes((0x10, 0x12))
+        struct.pack_into("<H", d5, 20, 357)
+        d5[521:551] = b"TEST-DDR5".ljust(30)
+        struct.pack_into("<H", d5, 510, binascii.crc_hqx(d5[:510], 0))
+        e5 = spd_device("2-0051", "spd5118", d5)
+        spd_device("3-0052", "at24", b"not an SPD driver")
+        spd_device("3-0038", "ee1004", b"not an SPD address")
+        inv = inventory()
+        self.assertEqual(len(inv["spd"]), 2)
+        self.assertEqual(inv["spd"][0]["part_number"], "TEST-DDR4")
+        self.assertEqual(inv["spd"][0]["jedec_rate_from_tck_mts"], 2667)
+        self.assertTrue(inv["spd"][0]["module_crc_valid"])
+        self.assertEqual(inv["spd"][1]["memory_type"], "DDR5")
+        self.assertEqual(inv["spd"][1]["tck_min_ps"], 357)
+        self.assertTrue(inv["spd"][1]["base_crc_valid"])
+        self.assertEqual(e4.read_bytes(), d4)
+        self.assertEqual(e5.read_bytes(), d5)
+        d4[18] ^= 1
+        e4.write_bytes(d4)
+        e5.write_bytes(d5[:100])
+        inv = inventory()
+        self.assertFalse(inv["spd"][0]["base_crc_valid"])
+        self.assertIsNone(inv["spd"][0]["part_number"])
+        self.assertIn("truncated", inv["spd"][1]["status"])
+        table.write_bytes(b"\x11\x28\x00")
+        inv = inventory(code=1)
+        self.assertEqual(inv["modules"], [])
+        self.assertIn("Truncated", inv["smbios_status"])
+        self.invoke("--modules", "--origins", code=2)
+        self.invoke("--modules", "--debug", code=2)
+
     def test_arguments_and_non_uefi(self):
         self.invoke("--debug", "--json", code=2)
         self.invoke("--board", "X670E Steel Legend", "--bios", "1.21", code=2)

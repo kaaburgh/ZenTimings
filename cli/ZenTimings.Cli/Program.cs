@@ -22,13 +22,18 @@ namespace ZenTimings.Cli
         private const string Help = """
             zentimings — saved BIOS settings and experimental running UMC timings
               zentimings [--origins] [--json]
-              zentimings --timings [--json]\n              zentimings --compare [--json]\n              zentimings --debug
+              zentimings --timings [--pm-table] [--json]
+              zentimings --compare [--pm-table] [--json]
+              zentimings --pm-table [--json]
+              zentimings --debug
               zentimings --replay FILE [--board BOARD --bios VERSION] [--json]
               zentimings --help
 
             --debug includes private raw UEFI payloads on stdout; share only deliberately.
             Live access: Linux UEFI efivarfs, permissions as configured by the OS.
-            --timings/--compare require an already loaded ryzen_smu driver on supported AMD CPUs.\n            Do not run other SMN clients concurrently. Nominal clocks assume 100 MHz BCLK.
+            --timings/--compare require an already loaded ryzen_smu driver on supported AMD CPUs.
+            Do not run other SMN clients concurrently. Nominal clocks assume 100 MHz BCLK.
+            --pm-table: experimental Picasso SMU telemetry; no configured clock substitution.
             Exit codes: 0 success, 1 unavailable/unmatched, 2 invalid arguments or I/O.
             """;
 
@@ -36,7 +41,7 @@ namespace ZenTimings.Cli
         {
             try
             {
-                bool json = false, debug = false, origins = false, timings = false, compare = false;
+                bool json = false, debug = false, origins = false, timings = false, compare = false, pmTable = false;
                 string replay = null, board = null, bios = null, root = "/sys";
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 for (int i = 0; i < args.Length; i++)
@@ -53,6 +58,7 @@ namespace ZenTimings.Cli
                         case "--origins": origins = true; break;
                         case "--timings": timings = true; break;
                         case "--compare": compare = true; break;
+                        case "--pm-table": pmTable = true; break;
                         case "--replay": replay = Next(); break;
                         case "--board": board = Next(); break;
                         case "--bios": bios = Next(); break;
@@ -60,6 +66,8 @@ namespace ZenTimings.Cli
                         default: throw new ArgumentException("Unknown option: " + arg);
                     }
                 }
+                if (pmTable && (debug || origins || replay != null || seen.Contains("--sysfs-root")))
+                    throw new ArgumentException("PM Table mode is explicit, live-only, and incompatible with origins/debug/replay.");
                 if ((timings || compare) && (debug || replay != null || origins || (timings && compare) ||
                     seen.Contains("--sysfs-root")))
                     throw new ArgumentException("Running modes are explicit, live-only, and do not accept fixture paths.");
@@ -87,7 +95,8 @@ namespace ZenTimings.Cli
                     board = firmware.Board;
                     bios = firmware.Bios;
                     if (timings || compare)
-                        return PrintRunning(firmware, compare, json);
+                        return PrintRunning(firmware, compare, json, pmTable);
+                    if (pmTable) return PrintPmTable(json);
                     if (!firmware.IsAvailable)
                     {
                         Console.Error.WriteLine("efivarfs unavailable: " + firmware.EfiDirectory);
@@ -107,7 +116,7 @@ namespace ZenTimings.Cli
             }
         }
 
-        private static int PrintRunning(LinuxFirmware firmware, bool compare, bool json)
+        private static int PrintRunning(LinuxFirmware firmware, bool compare, bool json, bool pmTable)
         {
             // No hardware I/O before explicit --timings or --compare and CPUID validation.
             // The sysfs driver has a global response buffer. Two passes detect some,
@@ -136,6 +145,7 @@ namespace ZenTimings.Cli
             }
             SettingOriginReport saved = compare && firmware.IsAvailable ?
                 DrfxiSettingOrigins.ReadFromProvider(firmware.Board,firmware.Bios,(name,guid)=>firmware.Read(name,guid)?.Payload) : null;
+            var telemetry=pmTable?LinuxPowerTable.Capture():null;
             var data=snapshot.Channels.Select(c=>new {
                 channel=c.Index, memory_type=c.MemoryType, nominal_mclk_mhz=c.NominalMclkMHz,
                 nominal_data_rate_mts=2*c.NominalMclkMHz, refresh_status=c.RefreshStatus, registers=c.Registers,
@@ -150,11 +160,13 @@ namespace ZenTimings.Cli
                 schema_version=1, running_available=true, experimental=true, cpu=snapshot.Cpu,
                 board=firmware.Board,bios_version=firmware.Bios,source=snapshot.Source,note=snapshot.Note,
                 origins_matched=saved?.IsMatched ?? false,origins_status=compare?(saved?.Status??"efivarfs unavailable"):null,
+                pm_table=telemetry,
                 channels=data
             },new JsonSerializerOptions{WriteIndented=true}));
             else
             {
                 Console.WriteLine(snapshot.Note);
+                if(telemetry!=null) PrintPmTableText(telemetry);
                 if(compare) Console.WriteLine("Saved settings: "+(saved?.Status??"efivarfs unavailable"));
                 foreach(var c in data)
                 {
@@ -166,6 +178,25 @@ namespace ZenTimings.Cli
                 }
             }
             return 0;
+        }
+
+        private static int PrintPmTable(bool json)
+        {
+            var result=LinuxPowerTable.Capture();
+            if(json) Console.WriteLine(JsonSerializer.Serialize(new {schema_version=1,pm_table=result},
+                new JsonSerializerOptions{WriteIndented=true}));
+            else PrintPmTableText(result);
+            return result.available?0:1;
+        }
+        private static void PrintPmTableText(LinuxPowerTable.Result result)
+        {
+            Console.WriteLine("PM Table: "+result.status);
+            if(!result.available) return;
+            var p=result.sample;
+            Console.WriteLine($"  Version: {p.table_version}; bytes: {p.table_size}; driver: {p.driver_version}; SMU: {p.smu_firmware}");
+            Console.WriteLine($"  SMU FCLK {p.fclk_mhz:F2} MHz, UCLK {p.uclk_mhz:F2} MHz, MCLK {p.mclk_mhz:F2} MHz");
+            Console.WriteLine($"  SMU VSOC {p.vsoc_v:F4} V, CLDO VDDP {p.cldo_vddp_v:F4} V");
+            Console.WriteLine("  "+p.note);
         }
 
         private static string Identity(string raw, string label)

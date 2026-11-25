@@ -118,10 +118,65 @@ internal static class Program
         Fails<NotSupportedException>(()=>LinuxPowerTable.Decode(new("AuthenticAMD",0x19,0x61),"0.1.2","03","1","4.30.72.0",0x1E0004,0x6AC,b),"wrong CPU rejected");
     }
 
+    private static void ExtendedCapture()
+    {
+        foreach(bool ddr5 in new[]{false,true})
+        {
+            var cpu=new RunningTimings.CpuId("AuthenticAMD",ddr5?0x19:0x17,ddr5?0x61:0x18);
+            var r=Fixture(ddr5);
+            // Base fixtures remain strict; extra register words below are synthetic.
+            foreach(uint a in new uint[]{0x50050,0x50058,0x500D0,0x500D4,
+                0x5021C,0x5022C,0x50234,0x50238,0x5023C,0x50240,0x50244,0x50248,
+                0x5024C,0x50250,0x50258,0x5025C,0x50284,0x50288,0x5028C,0x502A4,
+                0x502A8,0x50DF4})
+                r[a]=0;
+            r[0x50050]=r[0x50058]=0x87654321;
+            r[0x500D4]=1u<<4;
+            r[0x50234]=0x0000120A;
+            r[0x50284]=0x00050231;
+            r[0x5012C]=ddr5?0u:1u<<16;
+            var c=RunningTimings.Capture(cpu,a=>r[a],"extended fixture",true).Channels[0];
+            var x=c.Extended;
+            Check(x.status=="complete","extended complete");
+            Check(x.fields["BGS"]==0 && x.fields["BGSAlt"]==1,"BGS mapping");
+            Check(x.fields["MOD"]==18 && x.fields["MRD"]==10,"additional MR timings");
+            Check(x.refresh_mode==(ddr5?"normal":"fine-granularity fixed"),"refresh mode");
+            Check(Math.Abs(x.nominal_effective_trfc_ns.Value-160)<0.001,"nominal effective tRFC");
+            if(ddr5)
+            {
+                Check(x.nitro=="2/3/1","Nitro order");
+                Check(x.fields["NitroRxDatChnDlyMode"]==1 && x.fields["NitroTxDatChnDlyMode"]==0 &&
+                    x.fields["NitroCtrlLineDlyMode"]==1,"Nitro delay mode bits");
+                r[0x5012C]=2;
+                var pb=RunningTimings.Capture(cpu,a=>r[a],"extended fixture",true).Channels[0].Extended;
+                Check(pb.refresh_mode=="per-bank only" && pb.nominal_effective_trfc_ns==null,"DDR5 per-bank duration not guessed");
+            }
+            else
+            {
+                Check(x.fgr_multiplier==2 && x.fgr_on_the_fly==false && x.nitro==null,"DDR4 FGR/no Nitro");
+                r[0x5012C]=5u<<16;
+                var otf=RunningTimings.Capture(cpu,a=>r[a],"extended fixture",true).Channels[0].Extended;
+                Check(otf.fgr_on_the_fly==true && otf.nominal_effective_trfc_ns==null,"DDR4 on-the-fly duration not guessed");
+                r[0x5012C]=3u<<16;
+                var reserved=RunningTimings.Capture(cpu,a=>r[a],"extended fixture",true).Channels[0].Extended;
+                Check(reserved.refresh_mode=="reserved" && reserved.fgr_multiplier==null,"reserved refresh code");
+            }
+            int calls=0;
+            c=RunningTimings.Capture(cpu,a=>a==0x50050?uint.MaxValue:
+                a==0x50234 && ++calls>1?r[a]^1:r[a],"partial fixture",true).Channels[0];
+            Check(c.Timings.ContainsKey("tCL") && c.Extended.status=="partial","partial extra read preserves primary timings");
+            Check(!c.Extended.fields.ContainsKey("BGS") && !c.Extended.fields.ContainsKey("MOD") &&
+                c.Extended.unavailable.ContainsKey("0x00050050") &&
+                c.Extended.unavailable.ContainsKey("0x00050234"),"failed/unstable extra omitted");
+            Check(RunningTimings.Capture(cpu,a=>r[a],"basic").Channels[0].Extended==null,"basic mode unchanged");
+        }
+    }
+
     private static void Main()
     {
         M75nCapture();
         PowerTableCaptures();
+        ExtendedCapture();
         foreach(bool ddr5 in new[]{false,true})
         {
             var cpu=new RunningTimings.CpuId("AuthenticAMD",ddr5?0x19:0x17,ddr5?0x61:0x18);

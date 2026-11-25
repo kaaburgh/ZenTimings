@@ -158,12 +158,23 @@ internal static class Program
             {
                 Set32(amd, 0, 0x420C3F32u);
                 Set32(amd, 4, 0x00000164u);
-                // Only these non-sensitive header words are copied from AFU evidence.
-                // Remaining bytes are synthetic.
+                // Only non-sensitive header and mapped timing bytes from AFU evidence.
+                // Unmapped bytes are synthetic; never commit the complete NVRAM blob.
             }
             Check(LenovoM75nSettingOrigins.IsRelease(version), "Lenovo live identity recognizes release");
             foreach (int offset in new[]{0xA6,0xAA,0xAE,0xB3,0xB5,0xB7,0xBA,0xBD})
                 amd[offset]=0;
+            if (old)
+            {
+                foreach (var field in new[] { new { Offset=0xA7, Value=57 },
+                    new { Offset=0xAB, Value=26 }, new { Offset=0xAF, Value=18 },
+                    new { Offset=0xB4, Value=3 }, new { Offset=0xB6, Value=3 } })
+                    amd[field.Offset]=(byte)field.Value;
+                Set16(amd,0xB8,312); Set16(amd,0xBB,192); Set16(amd,0xBE,132);
+                var afu = LenovoM75nSettingOrigins.FromBlobs(amd,setup,match);
+                Check(afu.IsMatched && afu.Find("tRFC").Source=="?" && afu.Find("tWR").Source=="?",
+                    "1.24 AFU saved Auto controls ignore populated timing values");
+            }
             var report=LenovoM75nSettingOrigins.FromBlobs(amd,setup,match);
             Check(report.IsMatched && report.Find("tCL").Source=="?", "DDR4 defaults remain unresolved");
             amd[0xA1]=16; amd[0xA2]=18; amd[0xA3]=20;

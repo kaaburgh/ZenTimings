@@ -59,6 +59,17 @@ The maps are compiled directly from the checked-out submodule at commit 869b7e82
 
 Compare mode reports each populated UMC separately, never merges channel readings or treats unknown origins as Auto. The existing BIOS resolver controls whether saved settings are trusted. Running data is independent of UEFI access, and compare mode can return a running snapshot even when origins are unavailable; check origins_matched/origins_status. The comparison uses the existing DiffersFrom method, excludes nominal clocks, and does not assert AGESA application or a required reboot. JSON includes the selected raw UMC registers (not raw UEFI blobs) for reproducible diagnosis.
 
+### Extended UMC readout (experimental)
+
+    sudo ./zentimings --timings --extended
+    sudo ./zentimings --compare --extended --pm-table --json
+
+Explicit opt-in; the ordinary timing path still reads the same registers. Extended mode adds controller configuration (ECC enable, burst, power-down), mode-register and PHY timings, BGS/BGSAlt, fine-granularity refresh and DDR5 Nitro. It uses the pinned DDR4/DDR5 dictionaries and the decoding rules in BaseDramTimings.cs, Ddr4Timings.cs and Ddr5Timings.cs. Extra field names follow the upstream dictionaries and are intentionally kept separate from saved BIOS comparison rows. JSON adds a nullable extended object per UMC, with raw registers, decoded fields, refresh mode, Nitro and unavailable-address diagnostics. All new hardware reads stay inside the already restricted UMC range and the existing SMN lock; missing, all-ones or unstable optional registers are omitted and reported rather than presented as zero. The underlying global driver buffer limitation remains. An all-zero BGS mapping pair is unresolved. A nominal effective tRFC duration is reported only when the refresh mode and relevant non-ambiguous tRFC word support it, using the UMC ratio at assumed 100 MHz BCLK (not SMU telemetry). DDR4 on-the-fly/reserved refresh and DDR5 non-normal modes omit the duration. Text output also renders Cmd2T as 1T/2T and GDM/Power Down as Enabled/Disabled; numeric JSON is unchanged.
+
+**Electrical parameters are not part of this decoder.** Windows DDR4 ApplyDdr4MemoryConfig obtains ProcODT, RTT, drive strengths and setup values from APOB, or a BIOS APCB configuration acquired through ACPI/WMI. The DDR5 path uses AOD/APOB data. Neither can be inferred from the UMC timing dictionaries. Linux acquisition of these sources remains separate work; this CLI explicitly reports electrical parameters unavailable rather than inventing register offsets or using inactive saved BIOS values. No direct physical-memory reads, arbitrary ACPI calls or SMBus probing were added.
+
+Tests cover synthetic DDR4/DDR5 extended words, different FGR modes, Nitro, BGS, optional register errors and preservation of all existing basic timing fixtures. Extended capture has not yet been tested on real hardware. On M75n, collect one --compare --extended --pm-table --json report; compare the existing timing rows with the preceding capture and check extended.status / unavailable. DDR5 remains pending on BD790i.
+
 ### Experimental Picasso PM Table
 
     sudo ./zentimings --pm-table

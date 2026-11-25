@@ -14,7 +14,7 @@ namespace ZenTimings.Cli
         internal sealed record CpuId(string Vendor, int Family, int Model);
         internal sealed record Channel(int Index, string MemoryType, double NominalMclkMHz,
             SortedDictionary<string, uint> Timings, SortedDictionary<string, string> Registers,
-            string RefreshStatus);
+            string RefreshStatus, ExtendedUmc.Result Extended);
         internal sealed record Snapshot(CpuId Cpu, string Source, Channel[] Channels, string Note);
         // Deliberately limited to the two target silicon groups, not arbitrary Zen models.
         internal static int MemoryType(CpuId cpu) =>
@@ -49,7 +49,7 @@ namespace ZenTimings.Cli
 
         // Address list is built from a restricted subset of the pinned upstream maps.
         // Only two UMCs on these specific client CPU groups. No arbitrary address input.
-        internal static Snapshot Capture(CpuId cpu, Func<uint,uint> read, string source)
+        internal static Snapshot Capture(CpuId cpu, Func<uint,uint> read, string source, bool extended = false)
         {
             int type = MemoryType(cpu);
             if (type < 0) throw new NotSupportedException("Unsupported CPUID; no SMN requests issued.");
@@ -111,9 +111,10 @@ namespace ZenTimings.Cli
                     if(sb.Length==1) timings["tRFCsb"]=sb[0];
                 }
                 raw.Add(0x50DF0,state);raw.Add(0x50000,cs0);raw.Add(0x50008,cs2);
+                var extra=extended?ExtendedUmc.Capture(type,offset,raw,timings,mclk,read):null;
                 channels.Add(new Channel(i,type==0?"DDR4":"DDR5",mclk,timings,
                     new SortedDictionary<string,string>(raw.ToDictionary(p=>$"0x{offset|p.Key:X8}",p=>$"0x{p.Value:X8}")),
-                    refreshStatus));
+                    refreshStatus,extra));
             }
             if(channels.Count==0) throw new IOException("No populated UMC found.");
             return new Snapshot(cpu,source,channels.ToArray(),

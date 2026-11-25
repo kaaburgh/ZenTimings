@@ -22,8 +22,8 @@ namespace ZenTimings.Cli
         private const string Help = """
             zentimings — saved BIOS settings and experimental running UMC timings
               zentimings [--origins] [--json]
-              zentimings --timings [--pm-table] [--json]
-              zentimings --compare [--pm-table] [--json]
+              zentimings --timings [--extended] [--pm-table] [--json]
+              zentimings --compare [--extended] [--pm-table] [--json]
               zentimings --pm-table [--json]
               zentimings --debug
               zentimings --replay FILE [--board BOARD --bios VERSION] [--json]
@@ -33,6 +33,7 @@ namespace ZenTimings.Cli
             Live access: Linux UEFI efivarfs, permissions as configured by the OS.
             --timings/--compare require an already loaded ryzen_smu driver on supported AMD CPUs.
             Do not run other SMN clients concurrently. Nominal clocks assume 100 MHz BCLK.
+            --extended: additional UMC fields, BGS, refresh mode and DDR5 Nitro.
             --pm-table: experimental Picasso SMU telemetry; no configured clock substitution.
             Exit codes: 0 success, 1 unavailable/unmatched, 2 invalid arguments or I/O.
             """;
@@ -41,7 +42,7 @@ namespace ZenTimings.Cli
         {
             try
             {
-                bool json = false, debug = false, origins = false, timings = false, compare = false, pmTable = false;
+                bool json = false, debug = false, origins = false, timings = false, compare = false, pmTable = false, extended = false;
                 string replay = null, board = null, bios = null, root = "/sys";
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 for (int i = 0; i < args.Length; i++)
@@ -59,6 +60,7 @@ namespace ZenTimings.Cli
                         case "--timings": timings = true; break;
                         case "--compare": compare = true; break;
                         case "--pm-table": pmTable = true; break;
+                        case "--extended": extended = true; break;
                         case "--replay": replay = Next(); break;
                         case "--board": board = Next(); break;
                         case "--bios": bios = Next(); break;
@@ -66,6 +68,8 @@ namespace ZenTimings.Cli
                         default: throw new ArgumentException("Unknown option: " + arg);
                     }
                 }
+                if(extended && !(timings || compare))
+                    throw new ArgumentException("--extended requires --timings or --compare.");
                 if (pmTable && (debug || origins || replay != null || seen.Contains("--sysfs-root")))
                     throw new ArgumentException("PM Table mode is explicit, live-only, and incompatible with origins/debug/replay.");
                 if ((timings || compare) && (debug || replay != null || origins || (timings && compare) ||
@@ -95,7 +99,7 @@ namespace ZenTimings.Cli
                     board = firmware.Board;
                     bios = firmware.Bios;
                     if (timings || compare)
-                        return PrintRunning(firmware, compare, json, pmTable);
+                        return PrintRunning(firmware, compare, json, pmTable, extended);
                     if (pmTable) return PrintPmTable(json);
                     if (!firmware.IsAvailable)
                     {
@@ -116,7 +120,7 @@ namespace ZenTimings.Cli
             }
         }
 
-        private static int PrintRunning(LinuxFirmware firmware, bool compare, bool json, bool pmTable)
+        private static int PrintRunning(LinuxFirmware firmware, bool compare, bool json, bool pmTable, bool extended)
         {
             // No hardware I/O before explicit --timings or --compare and CPUID validation.
             // The sysfs driver has a global response buffer. Two passes detect some,
@@ -134,7 +138,7 @@ namespace ZenTimings.Cli
                 // Kernel/other userspace programs do not honor this lock.
                 using var mutex = new System.Threading.Mutex(false,"ZenTimingsLinuxSmnRead");
                 if (!mutex.WaitOne(0)) throw new IOException("Another ZenTimings SMN reader is active.");
-                try { snapshot=RunningTimings.Capture(cpu,new RyzenSmuReader().Read,"ryzen_smu"); }
+                try { snapshot=RunningTimings.Capture(cpu,new RyzenSmuReader().Read,"ryzen_smu",extended); }
                 finally { mutex.ReleaseMutex(); }
             }
             catch (Exception ex)
@@ -148,7 +152,7 @@ namespace ZenTimings.Cli
             var telemetry=pmTable?LinuxPowerTable.Capture():null;
             var data=snapshot.Channels.Select(c=>new {
                 channel=c.Index, memory_type=c.MemoryType, nominal_mclk_mhz=c.NominalMclkMHz,
-                nominal_data_rate_mts=2*c.NominalMclkMHz, refresh_status=c.RefreshStatus, registers=c.Registers,
+                nominal_data_rate_mts=2*c.NominalMclkMHz, refresh_status=c.RefreshStatus, registers=c.Registers, extended=c.Extended,
                 rows=c.Timings.ToDictionary(p=>p.Key,p=>{
                     var row=saved?.Find(p.Key);
                     string running=p.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -173,11 +177,32 @@ namespace ZenTimings.Cli
                     Console.WriteLine($"UMC {c.channel}: {c.memory_type}, nominal MCLK {c.nominal_mclk_mhz:F2} MHz");
                     Console.WriteLine("{0,-20} {1,8} {2,10} {3,12} {4,8}","Setting","Running","Origin","Saved","Differs");
                     foreach(var p in c.rows)
-                        Console.WriteLine("{0,-20} {1,8} {2,10} {3,12} {4,8}",p.Key,p.Value.running,
+                        Console.WriteLine("{0,-20} {1,8} {2,10} {3,12} {4,8}",p.Key,DisplayRunning(p.Key,p.Value.running),
                             p.Value.origin??"-",p.Value.saved??"-",p.Value.differs_from_running?.ToString()??"-");
+                    if(c.extended!=null) PrintExtended(c.extended);
                 }
             }
             return 0;
+        }
+
+        private static string DisplayRunning(string key,uint value) =>
+            key=="Cmd2T"?(value==0?"1T":"2T"):
+            key is "GDM" or "PwrDwn"?(value==0?"Disabled":"Enabled"):
+            value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        private static void PrintExtended(ExtendedUmc.Result result)
+        {
+            Console.WriteLine("Extended UMC: "+result.status);
+            Console.WriteLine("  Refresh mode: "+result.refresh_mode);
+            if(result.nominal_effective_trfc_ns.HasValue)
+                Console.WriteLine($"  Nominal effective tRFC: {result.nominal_effective_trfc_ns:F2} ns (assumed BCLK)");
+            if(result.nitro!=null) Console.WriteLine("  Nitro Rx/Tx/Ctrl: "+result.nitro);
+            foreach(var p in result.fields)
+                Console.WriteLine("  {0,-24} {1}",p.Key,p.Key is "BGS" or "BGSAlt"?
+                    (p.Value==0?"Disabled":"Enabled"):p.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            foreach(var p in result.unavailable)
+                Console.WriteLine("  Unavailable "+p.Key+": "+p.Value);
+            Console.WriteLine("  "+result.electrical_status);
         }
 
         private static int PrintPmTable(bool json)

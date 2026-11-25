@@ -22,9 +22,10 @@ namespace ZenTimings.Cli
         private const string Help = """
             zentimings — saved BIOS settings and experimental running UMC timings
               zentimings [--origins] [--json]
-              zentimings --timings [--extended] [--pm-table] [--json]
-              zentimings --compare [--extended] [--pm-table] [--json]
+              zentimings --timings [--extended] [--pm-table] [--modules] [--json]
+              zentimings --compare [--extended] [--pm-table] [--modules] [--json]
               zentimings --pm-table [--json]
+              zentimings --modules [--json]
               zentimings --debug
               zentimings --replay FILE [--board BOARD --bios VERSION] [--json]
               zentimings --help
@@ -33,6 +34,7 @@ namespace ZenTimings.Cli
             Live access: Linux UEFI efivarfs, permissions as configured by the OS.
             --timings/--compare require an already loaded ryzen_smu driver on supported AMD CPUs.
             Do not run other SMN clients concurrently. Nominal clocks assume 100 MHz BCLK.
+            --modules: SMBIOS DIMM inventory and already-bound SPD EEPROMs (no I2C probing).
             --extended: additional UMC fields, BGS, refresh mode and DDR5 Nitro.
             --pm-table: experimental Picasso SMU telemetry; no configured clock substitution.
             Exit codes: 0 success, 1 unavailable/unmatched, 2 invalid arguments or I/O.
@@ -42,7 +44,7 @@ namespace ZenTimings.Cli
         {
             try
             {
-                bool json = false, debug = false, origins = false, timings = false, compare = false, pmTable = false, extended = false;
+                bool json = false, debug = false, origins = false, timings = false, compare = false, pmTable = false, extended = false, modules = false;
                 string replay = null, board = null, bios = null, root = "/sys";
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 for (int i = 0; i < args.Length; i++)
@@ -61,6 +63,7 @@ namespace ZenTimings.Cli
                         case "--compare": compare = true; break;
                         case "--pm-table": pmTable = true; break;
                         case "--extended": extended = true; break;
+                        case "--modules": modules = true; break;
                         case "--replay": replay = Next(); break;
                         case "--board": board = Next(); break;
                         case "--bios": bios = Next(); break;
@@ -68,6 +71,8 @@ namespace ZenTimings.Cli
                         default: throw new ArgumentException("Unknown option: " + arg);
                     }
                 }
+                if(modules && (origins || debug || replay != null || (pmTable && !(timings || compare))))
+                    throw new ArgumentException("--modules may be used alone or with --timings/--compare.");
                 if(extended && !(timings || compare))
                     throw new ArgumentException("--extended requires --timings or --compare.");
                 if (pmTable && (debug || origins || replay != null || seen.Contains("--sysfs-root")))
@@ -99,8 +104,9 @@ namespace ZenTimings.Cli
                     board = firmware.Board;
                     bios = firmware.Bios;
                     if (timings || compare)
-                        return PrintRunning(firmware, compare, json, pmTable, extended);
+                        return PrintRunning(firmware, compare, json, pmTable, extended, modules);
                     if (pmTable) return PrintPmTable(json);
+                    if (modules) return PrintModules(LinuxMemoryInventory.Capture(root),json);
                     if (!firmware.IsAvailable)
                     {
                         Console.Error.WriteLine("efivarfs unavailable: " + firmware.EfiDirectory);
@@ -120,7 +126,7 @@ namespace ZenTimings.Cli
             }
         }
 
-        private static int PrintRunning(LinuxFirmware firmware, bool compare, bool json, bool pmTable, bool extended)
+        private static int PrintRunning(LinuxFirmware firmware, bool compare, bool json, bool pmTable, bool extended, bool modules)
         {
             // No hardware I/O before explicit --timings or --compare and CPUID validation.
             // The sysfs driver has a global response buffer. Two passes detect some,
@@ -150,6 +156,7 @@ namespace ZenTimings.Cli
             SettingOriginReport saved = compare && firmware.IsAvailable ?
                 DrfxiSettingOrigins.ReadFromProvider(firmware.Board,firmware.Bios,(name,guid)=>firmware.Read(name,guid)?.Payload) : null;
             var telemetry=pmTable?LinuxPowerTable.Capture():null;
+            var inventory=modules?LinuxMemoryInventory.Capture("/sys"):null;
             var data=snapshot.Channels.Select(c=>new {
                 channel=c.Index, memory_type=c.MemoryType, nominal_mclk_mhz=c.NominalMclkMHz,
                 nominal_data_rate_mts=2*c.NominalMclkMHz, refresh_status=c.RefreshStatus, registers=c.Registers, extended=c.Extended,
@@ -164,13 +171,14 @@ namespace ZenTimings.Cli
                 schema_version=1, running_available=true, experimental=true, cpu=snapshot.Cpu,
                 board=firmware.Board,bios_version=firmware.Bios,source=snapshot.Source,note=snapshot.Note,
                 origins_matched=saved?.IsMatched ?? false,origins_status=compare?(saved?.Status??"efivarfs unavailable"):null,
-                pm_table=telemetry,
+                pm_table=telemetry, memory_inventory=inventory,
                 channels=data
             },new JsonSerializerOptions{WriteIndented=true}));
             else
             {
                 Console.WriteLine(snapshot.Note);
                 if(telemetry!=null) PrintPmTableText(telemetry);
+                if(inventory!=null) PrintModules(inventory,false);
                 if(compare) Console.WriteLine("Saved settings: "+(saved?.Status??"efivarfs unavailable"));
                 foreach(var c in data)
                 {
@@ -183,6 +191,27 @@ namespace ZenTimings.Cli
                 }
             }
             return 0;
+        }
+
+        private static int PrintModules(LinuxMemoryInventory.Result inventory,bool json)
+        {
+            if(json)
+                Console.WriteLine(JsonSerializer.Serialize(new {schema_version=1,memory_inventory=inventory},
+                    new JsonSerializerOptions{WriteIndented=true}));
+            else
+            {
+                Console.WriteLine("SMBIOS: "+inventory.smbios_status);
+                foreach(var m in inventory.modules)
+                    Console.WriteLine($"  {m.locator??"?"} / {m.bank_locator??"?"}: {m.manufacturer??"?"} {m.part_number??"?"}, "+
+                        $"{m.memory_type} {m.form_factor}, {m.capacity_bytes/1048576} MiB, ranks {m.ranks}, "+
+                        $"rated {m.rated_mts}, configured {m.configured_mts} MT/s, configured {m.configured_mv} mV");
+                Console.WriteLine("SPD: "+inventory.spd_status);
+                foreach(var d in inventory.spd)
+                    Console.WriteLine($"  {d.device} ({d.driver}): {d.status}; {d.memory_type} {d.part_number}, "+
+                        $"revision {d.revision}, tCK min {d.tck_min_ps} ps, base CRC {d.base_crc_valid}");
+                Console.WriteLine(inventory.note);
+            }
+            return inventory.modules.Length>0 || inventory.spd.Any(d=>d.base_crc_valid==true)?0:1;
         }
 
         private static string DisplayRunning(string key,uint value) =>

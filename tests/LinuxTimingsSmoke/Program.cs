@@ -37,7 +37,7 @@ internal static class Program
         r[0x50228]=ddr5?48u<<8:20u<<8;
         r[0x50230]=ddr5?11677u:9360u;
         r[0x50260]=ddr5?0x00C00138u:0x21060138u;
-        r[0x50264]=ddr5?480u|(260u<<16):312u|(192u<<11)|(132u<<22);
+        r[0x50264]=ddr5?480u|(260u<<16):350u|(192u<<11)|(132u<<22);
         r[0x502C0]=180;
         return r;
     }
@@ -54,7 +54,7 @@ internal static class Program
             Check(c.NominalMclkMHz==(ddr5?3000:1200),"UMC ratio");
             Check(c.Timings["tCL"]==(ddr5?36:16),"CL");
             Check(c.Timings["tRCDWR"]==(ddr5?42:20),"separate write timing");
-            Check(c.Timings["tRFC"]==(ddr5?480:312),"refresh sentinel");
+            Check(c.Timings["tRFC"]==(ddr5?480:350),"refresh sentinel");
             Check(c.Timings["tRFC2"]==(ddr5?260:192),"refresh width");
             Check(c.Timings["GDM"]==1,"GDM bit position");
             Check(c.Timings["tFAW"]==(ddr5?128:32),"FAW width");
@@ -62,6 +62,14 @@ internal static class Program
             Check(c.Timings["tRDWR"]==(ddr5?48:20),"RDWR width");
             Check(c.Timings["tREFI"]==(ddr5?11677:9360),"REFI");
             Check(ddr5?c.Timings["tRFCsb"]==180:c.Timings["tRFC4"]==132,"generation-specific refresh");
+            // The actual M75n saved Auto values 312/192/132 encode precisely
+            // the DDR4 reset/reference pattern 0x21060138. Its appearance in
+            // the UMC register alone cannot establish the effective rank value.
+            uint activeRefresh=r[0x50264];
+            r[0x50264]=r[0x50260];
+            Check(!RunningTimings.Capture(cpu,a=>r[a],"fixture").Channels[0].Timings.ContainsKey("tRFC"),
+                "default-pattern-only refresh remains unresolved");
+            r[0x50264]=activeRefresh;
             r[0x50260]=r[0x50264]+1;
             Check(!RunningTimings.Capture(cpu,a=>r[a],"fixture").Channels[0].Timings.ContainsKey("tRFC"),
                 "conflicting refresh values remain unresolved");

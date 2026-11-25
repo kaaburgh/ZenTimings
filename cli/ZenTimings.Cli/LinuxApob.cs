@@ -55,9 +55,18 @@ namespace ZenTimings.Cli
                 previousEnd=(ulong)e.Offset+e.Size;
             }
             if(raw.Count==0) throw new InvalidDataException("No structurally valid APOB entries.");
-            var entries=raw.Select(e=>new Entry(e.Offset,e.GroupId,e.DataTypeId,e.InstanceId,e.Size,e.IsEncrypted,e.Name)).ToArray();
+            // M75n M33KT24A AFU dump: APOB v0x13, header 0xC0. MEM 1/17 is
+            // a 120-byte non-SPD entry; MEM 1/18 is the DDR4 SPD array. Do
+            // not interpret newer MBIST (1/18) records as SPD.
+            bool legacyDdr4=decodeDdr4 && h.version==0x13 && h.header==0xC0;
+            bool IsLegacySpd(ApobEntry e) => legacyDdr4 && e.RawGroupId==1 && e.RawDataTypeId==18 &&
+                e.Size==2180 && b[e.Offset+48]==1 && b[e.Offset+49]==2 &&
+                raw.Count(x=>x.RawGroupId==1 && x.RawDataTypeId==17 && x.InstanceId==e.InstanceId && x.Size==120)==1 &&
+                raw.Count(x=>x.RawGroupId==1 && x.RawDataTypeId==2 && x.InstanceId==e.InstanceId && x.Size==256)==1;
+            var entries=raw.Select(e=>new Entry(e.Offset,e.GroupId,e.DataTypeId,e.InstanceId,e.Size,e.IsEncrypted,
+                IsLegacySpd(e)?"DIMM SPD data (legacy v0x13 candidate)":e.Name)).ToArray();
             var electrical=new List<Electrical>(); var spd=new List<SpdSlot>(); var diagnostics=new List<string>();
-            foreach(var e in raw.Where(e=>e.GroupId==1 && (e.DataTypeId==2 || e.DataTypeId==17)))
+            foreach(var e in raw.Where(e=>e.GroupId==1 && (e.DataTypeId==2 || e.DataTypeId==17 || IsLegacySpd(e))))
             {
                 string label=$"MEM {e.DataTypeId} instance {e.InstanceId} at 0x{e.Offset:X}";
                 if(e.IsEncrypted || e.RawGroupId!=e.GroupId || e.RawDataTypeId!=e.DataTypeId)
@@ -83,9 +92,24 @@ namespace ZenTimings.Cli
                         electrical.Add(new Electrical(e.InstanceId,ch.Channel,c.MemClkFreq,c.DdrMaxRate,settings));
                     }
                 }
-                if(e.DataTypeId==17)
+                if(e.DataTypeId==17 || IsLegacySpd(e))
                 {
+                    bool legacy=IsLegacySpd(e);
+                    if(legacyDdr4 && e.DataTypeId==17 && e.Size==120)
+                    { diagnostics.Add(label+": legacy non-SPD record skipped"); continue; }
                     var slots=ApobDimmSpdParser.Decode(b,e.Offset);
+                    if(legacy)
+                    {
+                        // Exact captured two-channel topology, both CRCs valid.
+                        // Reuse the upstream record decoder, not an SPD byte scan.
+                        bool valid=slots.Count==2 && slots.Select(x=>x.Channel).OrderBy(x=>x).SequenceEqual(new[]{0,1}) &&
+                            slots.All(x=>x.Socket==0 && x.Dimm==0 && x.DeviceType==0x0C && x.Data.Length==512 &&
+                                LinuxMemoryInventory.ParseSpd("candidate","ee1004",x.Data).base_crc_valid==true &&
+                                LinuxMemoryInventory.ParseSpd("candidate","ee1004",x.Data).module_crc_valid==true);
+                        if(!valid) { diagnostics.Add(label+": legacy SPD topology/CRC mismatch"); continue; }
+                        if(spd.Count>0) { diagnostics.Add(label+": another SPD source already decoded; legacy candidate skipped"); continue; }
+                        diagnostics.Add(label+": legacy Picasso v0x13 DDR4 SPD array");
+                    }
                     foreach(var slot in slots)
                     {
                         if(slot.DeviceType!=0x0C && slot.DeviceType!=0x12)

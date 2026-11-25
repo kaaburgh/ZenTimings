@@ -22,10 +22,12 @@ namespace ZenTimings.Cli
         private const string Help = """
             zentimings — saved BIOS settings and experimental running UMC timings
               zentimings [--origins] [--json]
-              zentimings --timings [--extended] [--pm-table] [--modules] [--json]
-              zentimings --compare [--extended] [--pm-table] [--modules] [--json]
+              zentimings --timings [--extended] [--pm-table] [--modules] [--apob] [--json]
+              zentimings --compare [--extended] [--pm-table] [--modules] [--apob] [--json]
               zentimings --pm-table [--json]
               zentimings --modules [--json]
+              zentimings --apob [--json]
+              zentimings --apob-file FILE [--json]
               zentimings --debug
               zentimings --replay FILE [--board BOARD --bios VERSION] [--json]
               zentimings --help
@@ -34,6 +36,8 @@ namespace ZenTimings.Cli
             Live access: Linux UEFI efivarfs, permissions as configured by the OS.
             --timings/--compare require an already loaded ryzen_smu driver on supported AMD CPUs.
             Do not run other SMN clients concurrently. Nominal clocks assume 100 MHz BCLK.
+            --apob: explicit read-only attempt at known reserved APOB addresses; respects kernel access restrictions.
+            --apob-file: offline parsing of an existing complete APOB binary.
             --modules: SMBIOS DIMM inventory and already-bound SPD EEPROMs (no I2C probing).
             --extended: additional UMC fields, BGS, refresh mode and DDR5 Nitro.
             --pm-table: experimental Picasso SMU telemetry; no configured clock substitution.
@@ -44,8 +48,8 @@ namespace ZenTimings.Cli
         {
             try
             {
-                bool json = false, debug = false, origins = false, timings = false, compare = false, pmTable = false, extended = false, modules = false;
-                string replay = null, board = null, bios = null, root = "/sys";
+                bool json = false, debug = false, origins = false, timings = false, compare = false, pmTable = false, extended = false, modules = false, apob = false;
+                string apobFile = null, replay = null, board = null, bios = null, root = "/sys";
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 for (int i = 0; i < args.Length; i++)
                 {
@@ -64,6 +68,8 @@ namespace ZenTimings.Cli
                         case "--pm-table": pmTable = true; break;
                         case "--extended": extended = true; break;
                         case "--modules": modules = true; break;
+                        case "--apob": apob = true; break;
+                        case "--apob-file": apobFile = Next(); break;
                         case "--replay": replay = Next(); break;
                         case "--board": board = Next(); break;
                         case "--bios": bios = Next(); break;
@@ -71,6 +77,16 @@ namespace ZenTimings.Cli
                         default: throw new ArgumentException("Unknown option: " + arg);
                     }
                 }
+                if(apobFile!=null)
+                {
+                    if(apob || modules || pmTable || extended || timings || compare || origins || debug ||
+                        replay!=null || board!=null || bios!=null || seen.Contains("--sysfs-root"))
+                        throw new ArgumentException("--apob-file is offline and standalone.");
+                    return PrintApob(LinuxApob.ReadFile(apobFile),json);
+                }
+                if(apob && (origins || debug || replay!=null || seen.Contains("--sysfs-root") ||
+                    ((modules || pmTable) && !(timings || compare))))
+                    throw new ArgumentException("--apob is live-only, alone or with --timings/--compare.");
                 if(modules && (origins || debug || replay != null || (pmTable && !(timings || compare))))
                     throw new ArgumentException("--modules may be used alone or with --timings/--compare.");
                 if(extended && !(timings || compare))
@@ -104,7 +120,8 @@ namespace ZenTimings.Cli
                     board = firmware.Board;
                     bios = firmware.Bios;
                     if (timings || compare)
-                        return PrintRunning(firmware, compare, json, pmTable, extended, modules);
+                        return PrintRunning(firmware, compare, json, pmTable, extended, modules, apob);
+                    if (apob) return PrintApob(LinuxApob.Capture(),json);
                     if (pmTable) return PrintPmTable(json);
                     if (modules) return PrintModules(LinuxMemoryInventory.Capture(root),json);
                     if (!firmware.IsAvailable)
@@ -126,7 +143,7 @@ namespace ZenTimings.Cli
             }
         }
 
-        private static int PrintRunning(LinuxFirmware firmware, bool compare, bool json, bool pmTable, bool extended, bool modules)
+        private static int PrintRunning(LinuxFirmware firmware, bool compare, bool json, bool pmTable, bool extended, bool modules, bool apob)
         {
             // No hardware I/O before explicit --timings or --compare and CPUID validation.
             // The sysfs driver has a global response buffer. Two passes detect some,
@@ -157,6 +174,7 @@ namespace ZenTimings.Cli
                 DrfxiSettingOrigins.ReadFromProvider(firmware.Board,firmware.Bios,(name,guid)=>firmware.Read(name,guid)?.Payload) : null;
             var telemetry=pmTable?LinuxPowerTable.Capture():null;
             var inventory=modules?LinuxMemoryInventory.Capture("/sys"):null;
+            var boot=apob?LinuxApob.Capture():null;
             var data=snapshot.Channels.Select(c=>new {
                 channel=c.Index, memory_type=c.MemoryType, nominal_mclk_mhz=c.NominalMclkMHz,
                 nominal_data_rate_mts=2*c.NominalMclkMHz, refresh_status=c.RefreshStatus, registers=c.Registers, extended=c.Extended,
@@ -171,7 +189,7 @@ namespace ZenTimings.Cli
                 schema_version=1, running_available=true, experimental=true, cpu=snapshot.Cpu,
                 board=firmware.Board,bios_version=firmware.Bios,source=snapshot.Source,note=snapshot.Note,
                 origins_matched=saved?.IsMatched ?? false,origins_status=compare?(saved?.Status??"efivarfs unavailable"):null,
-                pm_table=telemetry, memory_inventory=inventory,
+                pm_table=telemetry, memory_inventory=inventory, apob=boot,
                 channels=data
             },new JsonSerializerOptions{WriteIndented=true}));
             else
@@ -179,6 +197,7 @@ namespace ZenTimings.Cli
                 Console.WriteLine(snapshot.Note);
                 if(telemetry!=null) PrintPmTableText(telemetry);
                 if(inventory!=null) PrintModules(inventory,false);
+                if(boot!=null) PrintApob(boot,false);
                 if(compare) Console.WriteLine("Saved settings: "+(saved?.Status??"efivarfs unavailable"));
                 foreach(var c in data)
                 {
@@ -191,6 +210,29 @@ namespace ZenTimings.Cli
                 }
             }
             return 0;
+        }
+
+        private static int PrintApob(LinuxApob.Result result,bool json)
+        {
+            if(json)
+                Console.WriteLine(JsonSerializer.Serialize(new {schema_version=1,apob=result},
+                    new JsonSerializerOptions{WriteIndented=true}));
+            else
+            {
+                Console.WriteLine("APOB: "+result.status);
+                if(result.available)
+                    Console.WriteLine($"  {result.source}; address {result.address??"-"}; version 0x{result.version:X}; {result.table_size} bytes; {result.entries.Length} entries");
+                foreach(var d in result.diagnostics) Console.WriteLine("  "+d);
+                foreach(var c in result.electrical)
+                {
+                    Console.WriteLine($"  Instance {c.instance}, APOB channel {c.channel}: boot MEMCLK {c.memclk_mhz} MHz");
+                    foreach(var p in c.settings) Console.WriteLine($"    {p.Key,-20} {p.Value.display} (code {p.Value.code})");
+                }
+                foreach(var slot in result.spd)
+                    Console.WriteLine($"  SPD copy: socket {slot.socket}, channel {slot.channel}, DIMM {slot.dimm}: {slot.data.status}; {slot.data.part_number}");
+                Console.WriteLine(result.note);
+            }
+            return result.available?0:1;
         }
 
         private static int PrintModules(LinuxMemoryInventory.Result inventory,bool json)

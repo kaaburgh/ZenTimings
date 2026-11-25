@@ -229,6 +229,95 @@ class CliTest(unittest.TestCase):
         self.invoke("--modules", "--origins", code=2)
         self.invoke("--modules", "--debug", code=2)
 
+    def test_apob_offline(self):
+        import struct
+        import binascii
+
+        def entry(group, kind, size, instance=0):
+            b = bytearray(size)
+            struct.pack_into("<IIII", b, 0, group, kind, instance, size)
+            return b
+
+        cfg = entry(1, 2, 256)
+        struct.pack_into("<HH", cfg, 48+4, 1200, 2400)
+        # Zen1 DDR4: four channel slots; one populated.
+        start = 48+0x98
+        for i, value in enumerate([14,1,1,3,0,0,0,1,1,1,1]):
+            cfg[start+i*4] = value
+        spd = entry(1, 17, 48+4+532)
+        spd[48:50] = bytes((1,1))
+        rec = 52
+        spd[rec+4] = 1
+        struct.pack_into("<I", spd, rec+8, 0x50)
+        spd[rec+12:rec+16] = b"SECR"
+        data = rec+20
+        spd[data+1:data+3] = bytes((0x11,0x0c))
+        spd[data+18] = 6
+        spd[data+325:data+329] = b"ABCD"
+        spd[data+329:data+349] = b"TEST-APOB-DDR4".ljust(20)
+        struct.pack_into("<H", spd, data+126, binascii.crc_hqx(spd[data:data+126],0))
+        header = bytearray(0x60)
+        def table(*entries):
+            struct.pack_into("<IIII",header,0,0x424f5041,1,len(header)+sum(map(len,entries)),len(header))
+            return header+b"".join(entries)
+
+        f = self.root / "apob.bin"
+        def run(blob, code=0):
+            f.write_bytes(blob)
+            p = self.invoke("--apob-file",str(f),"--json",code=code,live=False)
+            self.assertEqual(f.read_bytes(),blob)
+            self.assertNotIn("SECR",p.stdout)
+            self.assertNotIn("ABCD",p.stdout)
+            return json.loads(p.stdout)["apob"]
+
+        j = run(table(cfg,spd))
+        self.assertTrue(j["available"])
+        self.assertEqual(len(j["entries"]),2)
+        self.assertEqual(len(j["electrical"]),1)
+        self.assertEqual(j["electrical"][0]["memclk_mhz"],1200)
+        self.assertEqual(j["electrical"][0]["settings"]["ProcODT"]["code"],14)
+        self.assertEqual(j["electrical"][0]["settings"]["RttNom"]["code"],1)
+        self.assertEqual(len(j["spd"]),1)
+        self.assertTrue(j["spd"][0]["data"]["base_crc_valid"])
+        self.assertEqual(j["spd"][0]["data"]["part_number"],"TEST-APOB-DDR4")
+        encrypted = bytearray(cfg)
+        struct.pack_into("<I",encrypted,0,0xffff0001)
+        j = run(table(encrypted,spd))
+        self.assertEqual(j["electrical"],[])
+        self.assertTrue(j["entries"][0]["encrypted"])
+        j = run(table(cfg,cfg))
+        self.assertEqual(j["electrical"],[])
+        j = run(table(cfg,spd)[:-1],code=1)
+        self.assertFalse(j["available"])
+        self.assertFalse(run(b"not APOB",code=1)["available"])
+        # Picasso APOB v0x13, M33KT24A: 1/17 is not SPD; 1/18 is
+        # a 2180-byte array of four records, two populated. Synthetic SPD
+        # and no unique hardware identifiers; match the captured shape.
+        legacy17 = entry(1, 17, 120)
+        legacy17[48:52] = bytes((3,0,0,0))
+        legacy18 = entry(1, 18, 2180)
+        legacy18[48:52] = bytes((1,2,0,0))
+        for ch in range(2):
+            at = 52+532*ch
+            legacy18[at:at+532] = spd[52:584]
+            legacy18[at+1] = ch
+        def legacy_table(version=0x13):
+            h=bytearray(0xc0)
+            struct.pack_into("<IIII",h,0,0x424f5041,version,len(h)+len(cfg)+len(legacy17)+len(legacy18),len(h))
+            return h+cfg+legacy17+legacy18
+        j=run(legacy_table())
+        self.assertEqual(len(j["spd"]),2)
+        self.assertEqual([x["channel"] for x in j["spd"]],[0,1])
+        self.assertTrue(all(x["data"]["base_crc_valid"] and x["data"]["module_crc_valid"] for x in j["spd"]))
+        self.assertEqual(run(legacy_table(0x14))["spd"],[])
+        legacy18[52+20+18] ^= 1
+        self.assertEqual(run(legacy_table())["spd"],[])
+        legacy18[52+20+18] ^= 1
+        legacy18[52+532+1] = 0
+        self.assertEqual(run(legacy_table())["spd"],[])
+        self.invoke("--apob-file",str(f),"--compare",code=2,live=False)
+        self.invoke("--apob",code=2) # no live fixture override
+
     def test_arguments_and_non_uefi(self):
         self.invoke("--debug", "--json", code=2)
         self.invoke("--board", "X670E Steel Legend", "--bios", "1.21", code=2)

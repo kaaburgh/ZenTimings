@@ -10,5 +10,12 @@
   <ItemGroup>
     <Compile Include="../../ZenStates-Core/Dictionaries/DDR4Dictionary.cs" Link="Upstream/DDR4Dictionary.cs" />
     <Compile Include="../../ZenStates-Core/Dictionaries/DDR5Dictionary.cs" Link="Upstream/DDR5Dictionary.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/Apob/ApobEntry.cs" Link="Upstream/Hardware/Apob/ApobEntry.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/Apob/ApobCoreMap.cs" Link="Upstream/Hardware/Apob/ApobCoreMap.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/Apob/ApobMemGeneralConfig.cs" Link="Upstream/Hardware/Apob/ApobMemGeneralConfig.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/Apob/ApobDimmSpd.cs" Link="Upstream/Hardware/Apob/ApobDimmSpd.cs" />
+    <Compile Include="../../ZenStates-Core/Common/EncodedValueBase.cs" Link="Upstream/Common/EncodedValueBase.cs" />
+    <Compile Include="../../ZenStates-Core/Common/EncodedValues.cs" Link="Upstream/Common/EncodedValues.cs" />
+    <Compile Include="../../ZenStates-Core/Dictionaries/EncodedValueDictionaries.cs" Link="Upstream/Dictionaries/EncodedValueDictionaries.cs" />
   </ItemGroup>
 </Project>

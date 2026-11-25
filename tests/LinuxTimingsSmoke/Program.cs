@@ -172,11 +172,27 @@ internal static class Program
         }
     }
 
+    private static void ApobRangePolicy()
+    {
+        var m=LinuxApob.ParseMap(new[]{"04000000-0400ffff : reserved","09f00000-09f0ffff : ACPI Non-volatile Storage",
+            "0a200000-0a20ffff : System RAM","  04008000-04008fff : PCI Bus 0000:00","00000000-00000000 : reserved"});
+        Check(LinuxApob.Allowed(m,0x04000000,16),"APOB header in reserved region");
+        Check(LinuxApob.Allowed(m,0x09f00000,65536),"APOB exact NVS range");
+        Check(!LinuxApob.Allowed(m,0x09f00000,65537),"APOB range boundary");
+        Check(!LinuxApob.Allowed(m,0x04000000,65536),"APOB overlapping child resource");
+        Check(!LinuxApob.Allowed(m,0x0a200000,16),"APOB System RAM not read");
+        Check(!LinuxApob.Allowed(m,0x05000000,16),"APOB unknown region not read");
+        Check(!LinuxApob.Allowed(m,long.MaxValue,16),"APOB overflow rejected");
+        Check(!LinuxApob.Allowed(m,0x04000000,0),"APOB zero length rejected");
+        Check(!LinuxApob.Allowed(LinuxApob.ParseMap(new[]{"00000000-00000000 : reserved"}),0x04000000,16),"APOB masked map rejected");
+    }
+
     private static void Main()
     {
         M75nCapture();
         PowerTableCaptures();
         ExtendedCapture();
+        ApobRangePolicy();
         foreach(bool ddr5 in new[]{false,true})
         {
             var cpu=new RunningTimings.CpuId("AuthenticAMD",ddr5?0x19:0x17,ddr5?0x61:0x18);

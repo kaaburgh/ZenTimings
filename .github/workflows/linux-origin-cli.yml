@@ -1,0 +1,32 @@
+name: Linux BIOS origin CLI
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Existing origin smoke tests on Linux
+        run: dotnet run --project tests/DrfxiOriginSmoke/DrfxiOriginSmoke.Linux.csproj -c Release
+      - name: Build CLI
+        run: dotnet build cli/ZenTimings.Cli/ZenTimings.Cli.csproj -c Release
+      - name: CLI integration tests (synthetic sysfs)
+        run: python3 tests/LinuxCli/test_cli.py cli/ZenTimings.Cli/bin/Release/net10.0/zentimings.dll
+      - name: Publish standalone x64 CLI
+        run: dotnet publish cli/ZenTimings.Cli/ZenTimings.Cli.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o publish/linux-x64
+      - name: Smoke standalone executable
+        run: ./publish/linux-x64/zentimings --help
+      - name: Package with executable permissions
+        run: tar -C publish/linux-x64 -czf zentimings-linux-x64.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zentimings-linux-x64
+          path: zentimings-linux-x64.tar.gz

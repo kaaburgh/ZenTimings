@@ -112,7 +112,7 @@ jobs:
             'PR: ${{ github.event.pull_request.html_url }}'
             "Git commit: $sourceCommit"
             'Configuration: Release, Any CPU, .NET Framework 4.7.2'
-            'Not signed. Lenovo M33KT32A/M33KT33A are IFR-derived, not hardware verified. Includes stacked ASRock and MSI work. Does not write UEFI variables.'
+            'Not signed. Lenovo M33KT24A/M33KT32A/M33KT33A are IFR-derived, not hardware verified. Includes stacked ASRock and MSI work. Does not write UEFI variables.'
             'Built-in update check: disabled (custom build; never offers the official release).'
             'IMPORTANT: Includes the legacy InpOut native library for AOD/APOB reads.'
             'The native library may load a legacy kernel driver, which Windows 11 security can block.'

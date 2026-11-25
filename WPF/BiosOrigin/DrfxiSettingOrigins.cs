@@ -30,6 +30,7 @@ namespace ZenTimings.BiosOrigin
                 {
                     case "AOD": return "M·AOD";
                     case "CBS": return "M·CBS";
+                    case "Setup": return "M·UEFI";
                     case "Auto": return "A";
                     case "AGESA": return "·";
                     default: return "?";
@@ -41,7 +42,7 @@ namespace ZenTimings.BiosOrigin
         // In particular, hardware impedance encodings and AGESA-computed timings are NOT comparable.
         public bool? DiffersFrom(string displayedValue, double mclk = 0)
         {
-            if ((Source != "AOD" && Source != "CBS") || !StoredNumber.HasValue)
+            if ((Source != "AOD" && Source != "CBS" && Source != "Setup") || !StoredNumber.HasValue)
                 return null;
 
             double expected = StoredNumber.Value;
@@ -83,7 +84,7 @@ namespace ZenTimings.BiosOrigin
         public string Tooltip(string displayedValue, double mclk = 0, string runningSource = null)
         {
             string tooltip = Details ?? "";
-            if (Source == "AOD" || Source == "CBS")
+            if (Source == "AOD" || Source == "CBS" || Source == "Setup")
             {
                 if (!string.IsNullOrWhiteSpace(Stored))
                     tooltip += "\nSaved: " + Stored;
@@ -393,7 +394,8 @@ namespace ZenTimings.BiosOrigin
                     return Unavailable("No supported origin layout catalog entry for this board / BIOS.");
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
                     return Unavailable("AI-proposed origin layouts require maintainer verification before display.");
-                if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e")
+                if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e"
+                    && candidate.Resolver != AsrockSteelLegendSettingOrigins.Resolver)
                     return Unavailable("Origin layout has no trusted resolver: " + candidate.LayoutId);
                 if (Environment.OSVersion.Platform != PlatformID.Win32NT)
                     return Unavailable("Windows UEFI API is not available on this OS.");
@@ -432,7 +434,8 @@ namespace ZenTimings.BiosOrigin
                     return Unavailable("No supported origin layout for board / BIOS in debug report.");
                 if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
                     return Unavailable("AI-proposed origin layouts are not trusted for offline display.");
-                if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e")
+                if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e"
+                    && candidate.Resolver != AsrockSteelLegendSettingOrigins.Resolver)
                     return Unavailable("Origin layout has no trusted offline resolver: " + candidate.LayoutId);
                 var blobs = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
                 foreach (var variable in candidate.Variables)
@@ -483,6 +486,13 @@ namespace ZenTimings.BiosOrigin
                 blobs.TryGetValue("AodSetupRpl", out aod);
                 blobs.TryGetValue("Setup", out setup);
                 resolved = MsiMagB650SettingOrigins.FromBlobs(blobs["AmdSetupRPL"], aod, setup, candidate);
+            }
+            else if (candidate.Resolver == AsrockSteelLegendSettingOrigins.Resolver)
+            {
+                byte[] aod, setup;
+                blobs.TryGetValue("AodSetupRpl", out aod);
+                blobs.TryGetValue("Setup", out setup);
+                resolved = AsrockSteelLegendSettingOrigins.FromBlobs(blobs["AmdSetupRPL"], aod, setup, candidate);
             }
             else
             {

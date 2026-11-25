@@ -144,13 +144,24 @@ internal static class Program
     private static void RunLenovoM75nTests()
     {
         const string board = "ThinkCentre M75n";
-        foreach (string version in new[] { "M33KT32A", "M33KT33A" })
+        foreach (string version in new[] { "M33KT24A", "M33KT32A", "M33KT33A" })
         {
             var match = BiosOriginLayoutCatalog.Select(board,version);
             Check(match != null && match.LayoutId == LenovoM75nSettingOrigins.LayoutId &&
                 match.Status == "derived" && match.ExpectedSize("AmdSetup") == 0x53F,
                 "Lenovo canonical release " + version);
-            byte[] amd = Enumerable.Repeat((byte)255,0x53F).ToArray(), setup = new byte[0x1C1];
+            bool old = version == "M33KT24A";
+            int setupSize = old ? 0x1BE : 0x1C1;
+            Check(match.ExpectedSize("Setup") == setupSize, "Lenovo release-specific Setup size");
+            byte[] amd = Enumerable.Repeat((byte)255,0x53F).ToArray(), setup = new byte[setupSize];
+            if (old)
+            {
+                Set32(amd, 0, 0x420C3F32u);
+                Set32(amd, 4, 0x00000164u);
+                // Only these non-sensitive header words are copied from AFU evidence.
+                // Remaining bytes are synthetic.
+            }
+            Check(LenovoM75nSettingOrigins.IsRelease(version), "Lenovo live identity recognizes release");
             foreach (int offset in new[]{0xA6,0xAA,0xAE,0xB3,0xB5,0xB7,0xBA,0xBD})
                 amd[offset]=0;
             var report=LenovoM75nSettingOrigins.FromBlobs(amd,setup,match);
@@ -176,6 +187,19 @@ internal static class Program
             Check(!LenovoM75nSettingOrigins.FromBlobs(amd,new byte[1],match).IsMatched &&
                 !LenovoM75nSettingOrigins.FromBlobs(new byte[0x6D6],setup,match).IsMatched,
                 "Lenovo wrong variable sizes rejected");
+            Check(!LenovoM75nSettingOrigins.FromBlobs(amd,new byte[old ? 0x1C1 : 0x1BE],match).IsMatched,
+                "Lenovo cross-release native Setup size rejected");
+            if (old)
+            {
+                amd[0] ^= 1;
+                Check(!LenovoM75nSettingOrigins.FromBlobs(amd,setup,match).IsMatched,
+                    "Lenovo 1.24 AFU header mismatch rejected");
+                amd[0] ^= 1;
+                amd[4] ^= 1;
+                Check(!LenovoM75nSettingOrigins.FromBlobs(amd,setup,match).IsMatched,
+                    "Lenovo 1.24 second header word mismatch rejected");
+                amd[4] ^= 1;
+            }
             amd[0xC2]=13;
             Check(!LenovoM75nSettingOrigins.FromBlobs(amd,setup,match).IsMatched,"DDR4 noncontiguous tCWL options");
             amd[0xC2]=14; amd[0xA0]=37;
@@ -192,7 +216,8 @@ internal static class Program
             Check(LenovoM75nSettingOrigins.DescribeRawOffsets(amd).Any(x=>x.Contains("tCL[0xA1]=16")),
                 "DDR4 raw byte probe");
         }
-        Check(BiosOriginLayoutCatalog.Select(board,"M33KT24A")==null &&
+        Check(BiosOriginLayoutCatalog.Select(board,"M33KT25A")==null &&
+            !LenovoM75nSettingOrigins.IsRelease("M33KT24AB") &&
             BiosOriginLayoutCatalog.Select(board,"M33KT33AB")==null &&
             BiosOriginLayoutCatalog.Select("Other board","M33KT33A")==null,
             "Lenovo exact board and release required");

@@ -4,7 +4,7 @@ using System.Globalization;
 
 namespace ZenTimings.BiosOrigin
 {
-    // Raven/Picasso DDR4 CBS IFR, identical in M33KT32A and M33KT33A.
+    // Raven/Picasso DDR4 CBS IFR, identical in M33KT24A, M33KT32A and M33KT33A.
     // Only the saved CBS menu is classified, never the effective AGESA value.
     public static class LenovoM75nSettingOrigins
     {
@@ -12,6 +12,7 @@ namespace ZenTimings.BiosOrigin
         public const string LayoutId = "lenovo-m75n-m33";
         private const string Evidence = "AMD CBS (AmdSetup), saved menu state only; firmware application unverified.";
         public static bool IsRelease(string version) =>
+            string.Equals(version?.Trim(), "M33KT24A", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(version?.Trim(), "M33KT32A", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(version?.Trim(), "M33KT33A", StringComparison.OrdinalIgnoreCase);
 
@@ -47,6 +48,8 @@ namespace ZenTimings.BiosOrigin
                 yield return "  Reference omitted: unexpected AmdSetup size.";
                 yield break;
             }
+            yield return "  AmdSetup header u32: 0x" + ReadU32(bytes, 0).ToString("X8") +
+                " / 0x" + ReadU32(bytes, 4).ToString("X8");
             yield return "  Overclock[0x9F]=" + bytes[0x9F] + "; clock code[0xA0]=" + bytes[0xA0];
             foreach (var f in Direct)
                 yield return "  " + f.row + "[0x" + f.offset.ToString("X") + "]=" + bytes[f.offset];
@@ -55,6 +58,10 @@ namespace ZenTimings.BiosOrigin
                     " value[0x" + f.offset.ToString("X") + "]=" +
                     (bytes[f.offset] | (f.width == 2 ? bytes[f.offset+1] << 8 : 0));
         }
+
+        private static uint ReadU32(byte[] bytes, int offset) =>
+            (uint)bytes[offset] | ((uint)bytes[offset + 1] << 8) |
+            ((uint)bytes[offset + 2] << 16) | ((uint)bytes[offset + 3] << 24);
 
         private static SettingOriginRow Unknown(string row, string detail) =>
             new SettingOriginRow { Row = row, Source = "?", Details = detail + " " + Evidence };
@@ -76,6 +83,11 @@ namespace ZenTimings.BiosOrigin
             string error = firmware.CheckFingerprint(new Dictionary<string, byte[]> {
                 {"AmdSetup",amd}, {"Setup",setup} });
             if (error != null) return Reject(r, error);
+            // M33KT24A AFU dump contains three linked/mirrored AmdSetup records
+            // with the same first two u32 words. Do not assume these words for 1.32/1.33.
+            if (firmware.ReleaseVersion == "M33KT24A" &&
+                (ReadU32(amd, 0) != 0x420C3F32u || ReadU32(amd, 4) != 0x00000164u))
+                return Reject(r, "M33KT24A AmdSetup header differs from AFU NVRAM evidence.");
             int gate = amd[0x9F];
             if (gate != 1 && gate != 255) return Reject(r, "Overclock gate outside IFR options.");
             bool active = gate == 1;

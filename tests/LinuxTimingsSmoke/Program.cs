@@ -41,8 +41,45 @@ internal static class Program
         r[0x502C0]=180;
         return r;
     }
+    // Live Lenovo M75n / M33KT24A, Picasso 17h:18h, ryzen_smu 0.1.2.
+    // Only UMC registers, no raw UEFI blobs, serials or machine identifiers.
+    private static void M75nCapture()
+    {
+        var bank = new Dictionary<uint,uint> {
+            [0x50000]=0x00000001,[0x50008]=0x00000000,[0x50100]=0x80000200,
+            [0x5012C]=0x71100460,[0x50200]=0x00000124,[0x50204]=0x11112711,
+            [0x50208]=0x00110038,[0x5020C]=0x09000807,[0x50210]=0x00000024,
+            [0x50214]=0x0009030C,[0x50218]=0x00000012,[0x50220]=0x03010303,
+            [0x50224]=0x03010505,[0x50228]=0x00000A00,[0x50230]=0x00002494,
+            [0x50254]=0x06040008,[0x50260]=0x3049C9A5,[0x50264]=0x21060138,
+            [0x50DF0]=0x00020024
+        };
+        var raw = new Dictionary<uint,uint>();
+        foreach(var p in bank) { raw.Add(p.Key,p.Value); raw.Add(p.Key|0x100000,p.Value); }
+        var expected = new Dictionary<string,uint> {
+            ["Cmd2T"]=0,["GDM"]=0,["PwrDwn"]=1,["tCKE"]=6,["tCL"]=17,["tCWL"]=12,
+            ["tFAW"]=36,["tRAS"]=39,["tRC"]=56,["tRCDRD"]=17,["tRCDWR"]=17,
+            ["tRDRDDD"]=3,["tRDRDSC"]=1,["tRDRDSCL"]=3,["tRDRDSD"]=3,["tRDWR"]=10,
+            ["tREFI"]=9364,["tRFC"]=421,["tRFC2"]=313,["tRFC4"]=193,["tRP"]=17,
+            ["tRRDL"]=8,["tRRDS"]=7,["tRTP"]=9,["tWR"]=18,["tWRRD"]=0,
+            ["tWRWRDD"]=5,["tWRWRSC"]=1,["tWRWRSCL"]=3,["tWRWRSD"]=5,["tWTRL"]=9,["tWTRS"]=3
+        };
+        var snapshot = RunningTimings.Capture(new("AuthenticAMD",0x17,0x18),a=>raw[a],"M75n capture");
+        Check(snapshot.Channels.Length==2,"M75n both UMCs");
+        for (int i=0;i<2;i++)
+        {
+            var c=snapshot.Channels[i];
+            Check(c.Index==i && c.MemoryType=="DDR4" && c.NominalMclkMHz==1200,"M75n channel identity and ratio");
+            Check(c.Registers.Count==bank.Count && c.Timings.Count==expected.Count,"M75n complete capture");
+            foreach(var p in bank)
+                Check(c.Registers[$"0x{(p.Key|((uint)i<<20)):X8}"]==$"0x{p.Value:X8}","M75n register "+p.Key.ToString("X"));
+            foreach(var p in expected)
+                Check(c.Timings[p.Key]==p.Value,"M75n "+p.Key);
+        }
+    }
     private static void Main()
     {
+        M75nCapture();
         foreach(bool ddr5 in new[]{false,true})
         {
             var cpu=new RunningTimings.CpuId("AuthenticAMD",ddr5?0x19:0x17,ddr5?0x61:0x18);

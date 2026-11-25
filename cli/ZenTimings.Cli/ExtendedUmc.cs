@@ -40,7 +40,7 @@ namespace ZenTimings.Cli
             uint[] bgs={0x50050,0x50058,0x500D0,0x500D4};
             var addresses=defs.Where(p=>p.Value.Any(f=>ExtraFields.Contains(f.Name))).Select(p=>p.Key)
                 .Concat(bgs).Concat(type==1?new uint[]{0x50284}:Array.Empty<uint>())
-                .Append(0x5012C).Distinct().OrderBy(x=>x).ToArray();
+                .Append(0x5012Cu).Distinct().OrderBy(x=>x).ToArray();
             var fields=new SortedDictionary<string,uint>(StringComparer.Ordinal);
             var words=new Dictionary<uint,uint>();
             var registers=new SortedDictionary<string,string>(StringComparer.Ordinal);

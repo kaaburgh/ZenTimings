@@ -41,6 +41,9 @@
     <Compile Include="..\..\WPF\BiosOrigin\AsrockSteelLegendSettingOrigins.cs">
       <Link>AsrockSteelLegendSettingOrigins.cs</Link>
     </Compile>
+    <Compile Include="..\..\WPF\BiosOrigin\LenovoM75nSettingOrigins.cs">
+      <Link>LenovoM75nSettingOrigins.cs</Link>
+    </Compile>
     <EmbeddedResource Include="..\..\WPF\Resources\BiosLayouts\catalog-v1.json">
       <LogicalName>ZenTimings.Resources.BiosLayouts.catalog-v1.json</LogicalName>
     </EmbeddedResource>

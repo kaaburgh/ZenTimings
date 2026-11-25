@@ -59,6 +59,18 @@ The maps are compiled directly from the checked-out submodule at commit 869b7e82
 
 Compare mode reports each populated UMC separately, never merges channel readings or treats unknown origins as Auto. The existing BIOS resolver controls whether saved settings are trusted. Running data is independent of UEFI access, and compare mode can return a running snapshot even when origins are unavailable; check origins_matched/origins_status. The comparison uses the existing DiffersFrom method, excludes nominal clocks, and does not assert AGESA application or a required reboot. JSON includes the selected raw UMC registers (not raw UEFI blobs) for reproducible diagnosis.
 
+### Memory module inventory and optional SPD acquisition
+
+    sudo ./zentimings --modules
+    sudo ./zentimings --modules --json
+    sudo ./zentimings --compare --extended --pm-table --modules --json
+
+Explicit opt-in. Reads the kernel-provided binary SMBIOS table /sys/firmware/dmi/tables/DMI directly (no dmidecode dependency). Type 17 records with populated or unknown capacity are listed, including locator, bank locator, manufacturer, part number, memory type, form factor, capacity, ranks, widths, rated/configured data rate and configured voltage when present. Empty slots are skipped; unknown fields remain null. These are firmware-reported values, not live measurements. A malformed table produces an inventory status rather than invalidating a good UMC snapshot.
+
+The same mode checks already-enumerated I2C device directories at SPD addresses 0x50–0x57 and reads eeprom only for devices bound to ee1004 or spd5118. No I2C address scans, direct SMBus accesses, driver loading/binding, or sysfs writes. SPD reads may involve kernel-managed bus transactions. A missing EEPROM is reported explicitly. The initial SPD decoder checks DDR4/DDR5 device type, bounds and base CRC (DDR4 bytes 0–125, DDR5 bytes 0–509), also DDR4 module CRC when present. Exports a limited set of revision, module part number, manufacturer JEP106 code and tCK minimum/rate derived from tCK; the manufacturing area is not covered by the base CRC. The calculated rate is not a measured clock or rounded JEDEC speed grade. This is intentionally **not** full SPD/profile decoding: capacity/organization, all JEDEC timings, XMP/EXPO, and PMIC/temperature remain follow-up work. No raw SPD, serial numbers or asset tags are emitted. No automatic association between SPD device, SMBIOS locator and UMC channel is assumed.
+
+On M75n no bound SPD device is expected based on the previous hardware report; SMBIOS should show two Micron 4 GiB single-rank DDR4 modules rated 2667 MT/s, configured 2400 MT/s, 1200 mV. Standalone --modules does not require SMN or UEFI variable access; it returns 0 if module inventory or valid SPD is available, otherwise 1. In combined mode, check the separate inventory statuses; optional inventory failure does not discard a working UMC result. The --sysfs-root option is permitted for standalone fixture testing only; never point it at untrusted directories with sudo. Synthetic tests cover two populated modules plus an empty slot, privacy exclusions, valid DDR4/DDR5 SPD CRC, invalid/truncated SPD and malformed SMBIOS. Live inventory/SPD decoding has not yet been verified; M75n can validate SMBIOS and the absent-SPD path, but not the positive SPD path.
+
 ### Extended UMC readout (experimental)
 
     sudo ./zentimings --timings --extended

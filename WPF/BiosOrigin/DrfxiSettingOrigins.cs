@@ -426,14 +426,59 @@ namespace ZenTimings.BiosOrigin
                     string vendor = key.GetValue("SystemManufacturer") as string;
                     string family = key.GetValue("SystemFamily") as string ?? "";
                     string model = key.GetValue("SystemProductName") as string ?? "";
-                    if (string.Equals(vendor, "LENOVO", StringComparison.OrdinalIgnoreCase) &&
-                        (Regex.IsMatch(family, @"(?:^|[^a-zA-Z0-9])M75n(?:$|[^a-zA-Z0-9])", RegexOptions.IgnoreCase) ||
-                         Regex.IsMatch(model, @"^(11BS|11BT|11BU|11BV|11G4|11G5|11G6|11G7|11BW|11BX|11GW|11GX)[A-Z0-9]*$", RegexOptions.IgnoreCase)))
-                        return "ThinkCentre M75n";
+                    return ResolveBoardIdentity(board, biosVersion, vendor, family, model);
                 }
             }
             catch { /* No identity inference if the registry cannot be read. */ }
             return board;
+        }
+
+        // Shared SMBIOS identity policy. The caller supplies OS-specific DMI data.
+        public static string ResolveBoardIdentity(string board, string biosVersion,
+            string vendor, string family, string model)
+        {
+            if (!LenovoM75nSettingOrigins.IsRelease(biosVersion)) return board;
+            if (string.Equals(vendor, "LENOVO", StringComparison.OrdinalIgnoreCase) &&
+                (Regex.IsMatch(family ?? "", @"(?:^|[^a-zA-Z0-9])M75n(?:$|[^a-zA-Z0-9])", RegexOptions.IgnoreCase) ||
+                 Regex.IsMatch(model ?? "", @"^(11BS|11BT|11BU|11BV|11G4|11G5|11G6|11G7|11BW|11BX|11GW|11GX)[A-Z0-9]*$", RegexOptions.IgnoreCase)))
+                return "ThinkCentre M75n";
+            return board;
+        }
+
+        // Read-only, platform-neutral entry point. The provider returns payload bytes
+        // without OS-specific attributes, null for absent variables, or throws on I/O error.
+        public static SettingOriginReport ReadFromProvider(string board, string biosVersion,
+            Func<string, string, byte[]> read)
+        {
+            try
+            {
+                if (read == null) throw new ArgumentNullException(nameof(read));
+                var candidate = BiosOriginLayoutCatalog.Select(board, biosVersion);
+                if (candidate == null)
+                    return Unavailable("No supported origin layout catalog entry for this board / BIOS.");
+                if (!BiosOriginLayoutCatalog.MayDisplayOrigins(candidate.Status))
+                    return Unavailable("AI-proposed origin layouts require maintainer verification before display.");
+                if (candidate.Resolver != "drfxi-dragonrange-v1" && candidate.Resolver != "msi-mag-b650-raphael-v1e"
+                    && candidate.Resolver != AsrockSteelLegendSettingOrigins.Resolver
+                    && candidate.Resolver != LenovoM75nSettingOrigins.Resolver)
+                    return Unavailable("Origin layout has no trusted resolver: " + candidate.LayoutId);
+                var blobs = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+                foreach (var variable in candidate.Variables)
+                {
+                    byte[] bytes = read(variable.Name, variable.Guid);
+                    if (bytes == null)
+                    {
+                        if (variable.Optional) continue;
+                        return Unavailable("UEFI read failed: " + variable.Name + ": unavailable.");
+                    }
+                    blobs.Add(variable.Name, bytes);
+                }
+                return ResolveCatalogCandidate(candidate, blobs);
+            }
+            catch (Exception ex)
+            {
+                return Unavailable("UEFI origin catalog/read failed: " + ex.Message);
+            }
         }
 
         public static SettingOriginReport ReadFromFirmware(string board, string biosVersion)

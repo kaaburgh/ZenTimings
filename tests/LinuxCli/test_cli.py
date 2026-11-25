@@ -290,6 +290,31 @@ class CliTest(unittest.TestCase):
         j = run(table(cfg,spd)[:-1],code=1)
         self.assertFalse(j["available"])
         self.assertFalse(run(b"not APOB",code=1)["available"])
+        # Picasso APOB v0x13, M33KT24A: 1/17 is not SPD; 1/18 is
+        # a 2180-byte array of four records, two populated. Synthetic SPD
+        # and no unique hardware identifiers; match the captured shape.
+        legacy17 = entry(1, 17, 120)
+        legacy17[48:52] = bytes((3,0,0,0))
+        legacy18 = entry(1, 18, 2180)
+        legacy18[48:52] = bytes((1,2,0,0))
+        for ch in range(2):
+            at = 52+532*ch
+            legacy18[at:at+532] = spd[52:584]
+            legacy18[at+1] = ch
+        def legacy_table(version=0x13):
+            h=bytearray(0xc0)
+            struct.pack_into("<IIII",h,0,0x424f5041,version,len(h)+len(cfg)+len(legacy17)+len(legacy18),len(h))
+            return h+cfg+legacy17+legacy18
+        j=run(legacy_table())
+        self.assertEqual(len(j["spd"]),2)
+        self.assertEqual([x["channel"] for x in j["spd"]],[0,1])
+        self.assertTrue(all(x["data"]["base_crc_valid"] and x["data"]["module_crc_valid"] for x in j["spd"]))
+        self.assertEqual(run(legacy_table(0x14))["spd"],[])
+        legacy18[52+20+18] ^= 1
+        self.assertEqual(run(legacy_table())["spd"],[])
+        legacy18[52+20+18] ^= 1
+        legacy18[52+532+1] = 0
+        self.assertEqual(run(legacy_table())["spd"],[])
         self.invoke("--apob-file",str(f),"--compare",code=2,live=False)
         self.invoke("--apob",code=2) # no live fixture override
 

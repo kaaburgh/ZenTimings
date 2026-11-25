@@ -20,15 +20,15 @@ namespace ZenTimings.Cli
         };
 
         private const string Help = """
-            zentimings — read-only BIOS setting origins (not live memory timings)
+            zentimings — saved BIOS settings and experimental running UMC timings
               zentimings [--origins] [--json]
-              zentimings --debug
+              zentimings --timings [--json]\n              zentimings --compare [--json]\n              zentimings --debug
               zentimings --replay FILE [--board BOARD --bios VERSION] [--json]
               zentimings --help
 
             --debug includes private raw UEFI payloads on stdout; share only deliberately.
             Live access: Linux UEFI efivarfs, permissions as configured by the OS.
-            Running values and mismatch checks are not available in this release.
+            --timings/--compare require an already loaded ryzen_smu driver on supported AMD CPUs.\n            Do not run other SMN clients concurrently. Nominal clocks assume 100 MHz BCLK.
             Exit codes: 0 success, 1 unavailable/unmatched, 2 invalid arguments or I/O.
             """;
 
@@ -36,7 +36,7 @@ namespace ZenTimings.Cli
         {
             try
             {
-                bool json = false, debug = false, origins = false;
+                bool json = false, debug = false, origins = false, timings = false, compare = false;
                 string replay = null, board = null, bios = null, root = "/sys";
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 for (int i = 0; i < args.Length; i++)
@@ -51,6 +51,8 @@ namespace ZenTimings.Cli
                         case "--json": json = true; break;
                         case "--debug": debug = true; break;
                         case "--origins": origins = true; break;
+                        case "--timings": timings = true; break;
+                        case "--compare": compare = true; break;
                         case "--replay": replay = Next(); break;
                         case "--board": board = Next(); break;
                         case "--bios": bios = Next(); break;
@@ -58,6 +60,9 @@ namespace ZenTimings.Cli
                         default: throw new ArgumentException("Unknown option: " + arg);
                     }
                 }
+                if ((timings || compare) && (debug || replay != null || origins || (timings && compare) ||
+                    seen.Contains("--sysfs-root")))
+                    throw new ArgumentException("Running modes are explicit, live-only, and do not accept fixture paths.");
                 if (debug && (json || replay != null || origins) ||
                     replay != null && (origins || seen.Contains("--sysfs-root")) ||
                     replay == null && (board != null || bios != null) ||
@@ -81,6 +86,8 @@ namespace ZenTimings.Cli
                     var firmware = new LinuxFirmware(root);
                     board = firmware.Board;
                     bios = firmware.Bios;
+                    if (timings || compare)
+                        return PrintRunning(firmware, compare, json);
                     if (!firmware.IsAvailable)
                     {
                         Console.Error.WriteLine("efivarfs unavailable: " + firmware.EfiDirectory);
@@ -98,6 +105,67 @@ namespace ZenTimings.Cli
                 Console.Error.WriteLine(ex.GetType().Name + ": " + ex.Message);
                 return 2;
             }
+        }
+
+        private static int PrintRunning(LinuxFirmware firmware, bool compare, bool json)
+        {
+            // No hardware I/O before explicit --timings or --compare and CPUID validation.
+            // The sysfs driver has a global response buffer. Two passes detect some,
+            // but not all, concurrent interference; never claim atomicity.
+            RunningTimings.Snapshot snapshot;
+            try
+            {
+                var cpu=RunningTimings.Identify();
+                if (RunningTimings.MemoryType(cpu)<0)
+                    throw new NotSupportedException("Unsupported CPU family/model; no SMN requests issued.");
+                if (!File.Exists("/sys/kernel/ryzen_smu_drv/smn"))
+                    throw new IOException("ryzen_smu SMN interface unavailable. Driver must be installed and loaded separately.");
+                Console.Error.WriteLine("Experimental SMN read. Stop other ryzen_smu/SMN clients before use.");
+                // Prevent two instances of this CLI from interleaving requests.
+                // Kernel/other userspace programs do not honor this lock.
+                using var mutex = new System.Threading.Mutex(false,"ZenTimingsLinuxSmnRead");
+                if (!mutex.WaitOne(0)) throw new IOException("Another ZenTimings SMN reader is active.");
+                try { snapshot=RunningTimings.Capture(cpu,new RyzenSmuReader().Read,"ryzen_smu"); }
+                finally { mutex.ReleaseMutex(); }
+            }
+            catch (Exception ex)
+            {
+                if (json) Console.WriteLine(JsonSerializer.Serialize(new {schema_version=1,running_available=false,status=ex.Message}));
+                else Console.Error.WriteLine(ex.Message);
+                return 1;
+            }
+            SettingOriginReport saved = compare && firmware.IsAvailable ?
+                DrfxiSettingOrigins.ReadFromProvider(firmware.Board,firmware.Bios,(name,guid)=>firmware.Read(name,guid)?.Payload) : null;
+            var data=snapshot.Channels.Select(c=>new {
+                channel=c.Index, memory_type=c.MemoryType, nominal_mclk_mhz=c.NominalMclkMHz,
+                nominal_data_rate_mts=2*c.NominalMclkMHz, refresh_status=c.RefreshStatus, registers=c.Registers,
+                rows=c.Timings.ToDictionary(p=>p.Key,p=>{
+                    var row=saved?.Find(p.Key);
+                    string running=p.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    return new {running=p.Value,origin=row?.Source,saved=row?.Stored,
+                        differs_from_running=row?.DiffersFrom(running),note=row?.Details};
+                })
+            }).ToArray();
+            if (json) Console.WriteLine(JsonSerializer.Serialize(new {
+                schema_version=1, running_available=true, experimental=true, cpu=snapshot.Cpu,
+                board=firmware.Board,bios_version=firmware.Bios,source=snapshot.Source,note=snapshot.Note,
+                origins_matched=saved?.IsMatched ?? false,origins_status=compare?(saved?.Status??"efivarfs unavailable"):null,
+                channels=data
+            },new JsonSerializerOptions{WriteIndented=true}));
+            else
+            {
+                Console.WriteLine(snapshot.Note);
+                if(compare) Console.WriteLine("Saved settings: "+(saved?.Status??"efivarfs unavailable"));
+                foreach(var c in data)
+                {
+                    Console.WriteLine($"UMC {c.channel}: {c.memory_type}, nominal MCLK {c.nominal_mclk_mhz:F2} MHz");
+                    Console.WriteLine("{0,-20} {1,8} {2,10} {3,12} {4,8}","Setting","Running","Origin","Saved","Differs");
+                    foreach(var p in c.rows)
+                        Console.WriteLine("{0,-20} {1,8} {2,10} {3,12} {4,8}",p.Key,p.Value.running,
+                            p.Value.origin??"-",p.Value.saved??"-",p.Value.differs_from_running?.ToString()??"-");
+                }
+            }
+            return 0;
         }
 
         private static string Identity(string raw, string label)

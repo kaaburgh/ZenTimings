@@ -38,6 +38,9 @@
     <Compile Include="..\..\WPF\BiosOrigin\MsiMagB650SettingOrigins.cs">
       <Link>MsiMagB650SettingOrigins.cs</Link>
     </Compile>
+    <Compile Include="..\..\WPF\BiosOrigin\AsrockSteelLegendSettingOrigins.cs">
+      <Link>AsrockSteelLegendSettingOrigins.cs</Link>
+    </Compile>
     <EmbeddedResource Include="..\..\WPF\Resources\BiosLayouts\catalog-v1.json">
       <LogicalName>ZenTimings.Resources.BiosLayouts.catalog-v1.json</LogicalName>
     </EmbeddedResource>

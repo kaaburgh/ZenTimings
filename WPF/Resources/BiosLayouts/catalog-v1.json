@@ -207,6 +207,16 @@
       ],
       "releases": [
         {
+          "version": "M33KT24A",
+          "status": "derived",
+          "fingerprintOverrides": [
+            {
+              "name": "Setup",
+              "size": 446
+            }
+          ]
+        },
+        {
           "version": "M33KT32A",
           "status": "derived"
         },

@@ -39,6 +39,23 @@ namespace ZenTimings.BiosOrigin
             {59,1967},{60,2000},{61,2033},{62,2067},{63,2100}
         };
 
+        public static IEnumerable<string> DescribeRawOffsets(byte[] bytes)
+        {
+            yield return "  Lenovo M33 DDR4 reference offsets (UNVERIFIED for unknown firmware)";
+            if (bytes == null || bytes.Length != 0x53F)
+            {
+                yield return "  Reference omitted: unexpected AmdSetup size.";
+                yield break;
+            }
+            yield return "  Overclock[0x9F]=" + bytes[0x9F] + "; clock code[0xA0]=" + bytes[0xA0];
+            foreach (var f in Direct)
+                yield return "  " + f.row + "[0x" + f.offset.ToString("X") + "]=" + bytes[f.offset];
+            foreach (var f in Gated)
+                yield return "  " + f.row + " control[0x" + f.ctrl.ToString("X") + "]=" + bytes[f.ctrl] +
+                    " value[0x" + f.offset.ToString("X") + "]=" +
+                    (bytes[f.offset] | (f.width == 2 ? bytes[f.offset+1] << 8 : 0));
+        }
+
         private static SettingOriginRow Unknown(string row, string detail) =>
             new SettingOriginRow { Row = row, Source = "?", Details = detail + " " + Evidence };
         private static SettingOriginRow Manual(string row, int value, string kind = "timing", string label = null) =>

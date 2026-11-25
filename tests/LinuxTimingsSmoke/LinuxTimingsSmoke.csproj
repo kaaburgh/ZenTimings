@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../cli/ZenTimings.Cli/TimingDictionaryAdapter.cs" Link="TimingDictionaryAdapter.cs" />
+    <Compile Include="../../cli/ZenTimings.Cli/LinuxPowerTable.cs" Link="LinuxPowerTable.cs" />
     <Compile Include="../../cli/ZenTimings.Cli/RunningTimings.cs" Link="RunningTimings.cs" />
     <Compile Include="../../ZenStates-Core/Dictionaries/DDR4Dictionary.cs" Link="DDR4Dictionary.cs" />
     <Compile Include="../../ZenStates-Core/Dictionaries/DDR5Dictionary.cs" Link="DDR5Dictionary.cs" />

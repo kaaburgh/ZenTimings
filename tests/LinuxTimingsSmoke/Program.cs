@@ -77,9 +77,51 @@ internal static class Program
                 Check(c.Timings[p.Key]==p.Value,"M75n "+p.Key);
         }
     }
+    // Selected words from three gzip-validated M75n PM Table captures.
+    // No complete telemetry dump is committed.
+    private static void PowerTableCaptures()
+    {
+        var cpu=new RunningTimings.CpuId("AuthenticAMD",0x17,0x18);
+        byte[] Make(uint fclk,uint mclk,uint vsoc)
+        {
+            var b=new byte[0x6AC];
+            void Set(int offset,uint word)=>System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(offset,4),word);
+            Set(0x298,fclk); Set(0x29C,fclk); Set(0x2A0,mclk);
+            Set(0x104,vsoc); Set(0xF0,0x3F4CCCCC);
+            return b;
+        }
+        LinuxPowerTable.Sample Decode(byte[] b,uint version=0x1E0004,ulong size=0x6AC,string driver="0.1.2")
+            =>LinuxPowerTable.Decode(cpu,driver,"03","1","4.30.72.0",version,size,b);
+        var a=Make(0x440B222C,0x4451C3D8,0x3F378F80);
+        var b=Make(0x440D4AA3,0x44524DB4,0x3F3A02EB);
+        var p=Decode(a);var q=Decode(b);
+        Check(Math.Abs(p.fclk_mhz-556.53394f)<0.001f && p.fclk_mhz==p.uclk_mhz,"PM capture 1 FCLK/UCLK");
+        Check(Math.Abs(p.mclk_mhz-839.06006f)<0.001f && Math.Abs(p.vsoc_v-0.7170334f)<0.00001f,"PM capture 1 MCLK/VSOC");
+        Check(Math.Abs(q.fclk_mhz-565.1662f)<0.001f && q.fclk_mhz==q.uclk_mhz,"PM capture 2 FCLK/UCLK");
+        Check(Math.Abs(q.mclk_mhz-841.2141f)<0.001f && Math.Abs(q.vsoc_v-0.726607f)<0.00001f,"PM capture 2 MCLK/VSOC");
+        Check(Math.Abs(p.cldo_vddp_v-0.8f)<0.00001f && p.cldo_vddp_v==q.cldo_vddp_v,"PM VDDP");
+        // STREAM x4: amdgpu reported the 1200 MHz DPM state immediately
+        // before and after capture. SMU clock telemetry was lower.
+        var loaded=Decode(Make(0x443446A3,0x4468CBDE,0x3F4B13D3));
+        Check(Math.Abs(loaded.fclk_mhz-721.1037f)<0.001f && loaded.fclk_mhz==loaded.uclk_mhz,"PM STREAM FCLK/UCLK");
+        Check(Math.Abs(loaded.mclk_mhz-931.1854f)<0.001f && Math.Abs(loaded.vsoc_v-0.79327124f)<0.00001f,"PM STREAM MCLK/VSOC");
+        Check(loaded.mclk_mhz>q.mclk_mhz && loaded.mclk_mhz<1200 && loaded.vsoc_v>q.vsoc_v,"PM STREAM telemetry differs from selected DPM state");
+        Fails<NotSupportedException>(()=>Decode(a,version:0x1E0005),"unknown PM version rejected");
+        Fails<NotSupportedException>(()=>Decode(a,driver:"0.1.3"),"unknown driver rejected");
+        Fails<NotSupportedException>(()=>Decode(a,size:0x608),"unknown PM size rejected");
+        Fails<InvalidDataException>(()=>Decode(a[..^1]),"truncated PM Table rejected");
+        a[0x608]=1;
+        Fails<InvalidDataException>(()=>Decode(a),"nonzero PM tail rejected");
+        a[0x608]=0;
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(a.AsSpan(0x298,4),0x7FC00000);
+        Fails<InvalidDataException>(()=>Decode(a),"NaN clock rejected");
+        Fails<NotSupportedException>(()=>LinuxPowerTable.Decode(new("AuthenticAMD",0x19,0x61),"0.1.2","03","1","4.30.72.0",0x1E0004,0x6AC,b),"wrong CPU rejected");
+    }
+
     private static void Main()
     {
         M75nCapture();
+        PowerTableCaptures();
         foreach(bool ddr5 in new[]{false,true})
         {
             var cpu=new RunningTimings.CpuId("AuthenticAMD",ddr5?0x19:0x17,ddr5?0x61:0x18);

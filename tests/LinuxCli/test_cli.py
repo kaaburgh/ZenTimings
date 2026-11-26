@@ -399,6 +399,10 @@ class CliTest(unittest.TestCase):
                 gen3[o+4:o+18]=bytes(timings)
                 struct.pack_into("<III",gen3,o+0x12,350,260,160)
                 struct.pack_into("<7H",gen3,o+0x2a,mr0,1,mr2,0,8,0x0560,mr6-(g%2))
+        # Observed legacy metadata correlations; no channel semantics assigned.
+        for i,o in enumerate((0xab0,0xc40)):
+            struct.pack_into("<24H",gen3,48+o,i,1,0,0,0,1,1,0,0,0,0,0,1,0,0,1,
+                             1200,1333,14-i,0,0,0,0,1)
         replay=entry(7,4,13904)
         struct.pack_into("<I",replay,48+16,1454)
         def pair(buf,offset,a,v):
@@ -457,6 +461,10 @@ class CliTest(unittest.TestCase):
             pair(a,0x20,0xffffdead,7+2*(t-10))
             pair(a,0x20+n*8-16,0xffffdead,0x20)
             pair(a,0x20+n*8-8,0xffffdead,0x17)
+            # Two known repeated motifs in synthetic body; never decode
+            # their contents as PHY commands.
+            struct.pack_into("<12H",a,48+0x28,0xfff,0xfff,0x5b0,0x5b0,0xfff,0xfff,0,0,0x18,0x18,0x2f7,0x2f7)
+            struct.pack_into("<12H",a,48+0x68,0xfff,0xfff,0x5b1,0x5b1,0xfff,0xfff,0,0,0x18,0x18,0x2f7,0x2f7)
             companions.append(a)
         def with_config(rep=replay,comps=companions,version=0x13,gen=gen3):
             out=h+cfg+other+spd+gen+rep+b"".join(comps)
@@ -467,6 +475,25 @@ class CliTest(unittest.TestCase):
         gc=with_config()["gen_config"]
         self.assertIsNotNone(gc)
         self.assertEqual(len(gc["groups"]),4)
+        meta=gc["metadata_observations"]["observations"]
+        self.assertEqual([m["index_word"] for m in meta],[0,1])
+        self.assertEqual([m["word_22"] for m in meta],[1333,1333])
+        self.assertEqual([m["equal_group_indices"] for m in meta],[[0,2],[1,3]])
+        self.assertTrue(all(m["word_22_matches_all_spd_rated_clocks"] for m in meta))
+        # Bad metadata must not invalidate decoded timings.
+        badmeta=bytearray(gen3)
+        badmeta[48+0xad2]^=1<<3
+        self.assertIsNone(with_config(gen=badmeta)["gen_config"]["metadata_observations"])
+        badcopy=bytearray(gen3)
+        badcopy[48+0xde8+0x1e]^=1 # undecoded byte in a replicated group
+        self.assertIsNone(with_config(gen=badcopy)["gen_config"]["metadata_observations"])
+        for comp in with_replay()["companions"]:
+            st=comp["legacy_structure"]
+            self.assertEqual(st["motif_05b0_count"],1)
+            self.assertEqual(st["motif_05b1_count"],1)
+            self.assertEqual(st["adjacent_u16_pairs"],652 if comp["type"]<14 else 608)
+            self.assertEqual(st["equal_adjacent_u16_pairs"],st["adjacent_u16_pairs"])
+            self.assertEqual(st["observed_marker_ids"],[7+2*(comp["type"]-10),0x20,0x17])
         for g in gc["groups"]:
             self.assertEqual([st["memclk_mhz"] for st in g["states"]],[1200,1067,933,800])
             self.assertEqual([st["nominal_rate_mts"] for st in g["states"]],[2400,2133,1867,1600])

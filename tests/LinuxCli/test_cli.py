@@ -615,17 +615,29 @@ class CliTest(unittest.TestCase):
             header(x,n)
             pair(x,0x20,0xdead,0xb)
             companions.append(x)
-        def run(config=gen,rr=rep,mm=main,ss=spd,comps=companions,version=0x18):
+        def run(config=gen,rr=rep,mm=main,ss=spd,comps=companions,version=0x18,region_offset=4096,region_size=None):
             h=bytearray(0xa8)
             out=h+ss+mm+config+rr+b"".join(comps)
             struct.pack_into("<IIII",out,0,0x424f5041,version,len(out),len(h))
             f=self.root/"donor.bin"
-            f.write_bytes(b"APOB"+bytes(4092)+out)
+            prefix=bytearray(b"APOB"+bytes(4092))
+            tail=struct.pack("<II",1,0)+struct.pack("<IIQQ",0x20000063,len(out) if region_size is None else region_size,(1<<62)|region_offset,2**64-1)
+            a=z=65535
+            for (w,) in struct.iter_unpack("<H",tail):
+                a=(a+w)%65535
+                z=(z+a)%65535
+            dr=b"$BL2"+struct.pack("<I",((z or 65535)<<16)|(a or 65535))+tail
+            prefix[128:128+len(dr)]=dr
+            image=prefix+out
+            f.write_bytes(image)
             j=json.loads(self.invoke("--apob-image",str(f),"--json",live=False).stdout)["apob"]
-            self.assertEqual(f.read_bytes(),b"APOB"+bytes(4092)+out)
+            self.assertEqual(f.read_bytes(),image)
             self.assertEqual(j["image_offset"],"0x00001000")
             return j
         j=run()
+        self.assertTrue(j["bios_directory"]["matched_nv_region"])
+        self.assertFalse(run(region_offset=4080)["bios_directory"]["matched_nv_region"])
+        self.assertFalse(run(region_size=64)["bios_directory"]["matched_nv_region"])
         self.assertEqual(len(j["spd"]),2)
         for s in j["spd"]:
             self.assertTrue(s["data"]["base_crc_valid"])

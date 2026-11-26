@@ -430,6 +430,7 @@ class CliTest(unittest.TestCase):
                 # Deliberately sparse, shifted second channel. Preserve
                 # ordering for each register rather than actual all offsets.
                 pair(replay,0x100+ch*0x1000+8*i,off|a,v)
+        pair(replay,0x2d88,0x1c504,3)
         # Do not scan the opaque tail even if it contains a known address.
         pair(replay,0x2d90,0x50204,0xdeadbeef)
         # Synthetic common header (zeros except count), valid delimiters.
@@ -471,6 +472,9 @@ class CliTest(unittest.TestCase):
             self.assertEqual(len(c["missing_registers"]),10)
         bad=bytearray(replay)
         struct.pack_into("<I",bad,48+16,0xffffffff)
+        self.assertIsNone(with_replay(rep=bad))
+        bad=bytearray(replay)
+        struct.pack_into("<I",bad,48+16,1455)
         self.assertIsNone(with_replay(rep=bad))
         bad=bytearray(companions[0])
         bad[-1]=1

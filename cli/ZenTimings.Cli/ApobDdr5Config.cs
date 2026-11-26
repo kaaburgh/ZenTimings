@@ -22,6 +22,7 @@ namespace ZenTimings.Cli
         internal sealed record Result(string status,uint entry_offset,Group[] groups,string note)
         {
             public string layout { get; init; }
+            public int? unused_trailing_state_slots_per_group { get; init; }
             public ReplayCorrelation replay_correlation { get; init; }
         }
         private static readonly (string name,int off)[] Fields={
@@ -91,7 +92,7 @@ namespace ZenTimings.Cli
                         w.TryGetValue("tRFCsb",out uint a) && a==expected["tRFCsb"])) return null;
             }
             return new ReplayCorrelation(replay.channels.Select(x=>x.umc_address_index).ToArray(),fields,expected,
-                "Highest saved GEN state matches both UMC replay address blocks in 15 primary/secondary/refresh-interval fields and complete observed tRFC/tRFC2 and tRFCsb candidates. Nonzero standard refresh slots compared preferentially, otherwise SPD-like alternate slots. No proof of active state, effective refresh selection, physical group mapping or present hardware.");
+                "Highest saved GEN state matches both UMC replay address blocks in 15 primary/secondary/refresh-interval fields and complete observed tRFC/tRFC2 and tRFCsb candidates. Nonzero standard refresh slots compared preferentially, otherwise alternate slots (+84/+90/+A8), which may include tuned values. No proof of active state, effective refresh selection, physical group mapping or present hardware.");
         }
 
         internal static Result Decode(byte[] b,List<ApobEntry> entries,uint version,int header,IReadOnlyList<LinuxApob.SpdSlot> spd,bool variant=false)
@@ -108,6 +109,7 @@ namespace ZenTimings.Cli
             var p=b.AsSpan((int)gen.DataOffset,(int)gen.DataSize);
             var m=b.AsSpan((int)main.DataOffset,(int)main.DataSize);
             var groups=new List<Group>();
+            int unused=0;
             uint[] clocks={2400,1600,1000}; // Narrow donor fingerprint, not a general frequency search.
             int[] refreshOffsets={0x84,0x88,0x8C,0x90,0x94,0x98,0x9C,0xA8,0xAC,0xB0};
             for(int g=0;g<2;g++)
@@ -120,6 +122,18 @@ namespace ZenTimings.Cli
                 {
                     int o=first+i*0x164, eo=first+0x58F+i*0x19;
                     uint clk=U32(p,o),dfi=U32(p,o+4);
+                    // A real tuned v0x18 sample has two populated blocks and
+                    // a third zero slot. Only recognize the trailing slot when
+                    // ALL mapped timing and refresh words are zero in both groups.
+                    if(variant && i==2 && clk==0 && dfi==0)
+                    {
+                        if(U32(p,o+8)!=0 || Fields.Any(f=>U32(b,(int)gen.DataOffset+o+f.off)!=0) ||
+                            refreshOffsets.Any(x=>U32(b,(int)gen.DataOffset+o+x)!=0)) return null;
+                        if(g==0) unused=1;
+                        else if(unused!=1) return null;
+                        break;
+                    }
+                    if(g>0 && i>=groups[0].states.Length) return null;
                     if(dfi>4000 || dfi*2!=clk || U32(p,o+8)!=0) return null;
                     if(variant)
                     {
@@ -142,8 +156,8 @@ namespace ZenTimings.Cli
                     // independently consistent with both validated SPD minima.
                     if((!variant && (U32(p,o+0x88)!=0 || U32(p,o+0x94)!=0 || U32(p,o+0xAC)!=0)) ||
                        raw.Values.Any(v=>v>65535) ||
-                       r1==0 || r2==0 || rs==0 || r1<r2 || r2<rs ||
-                       U32(p,o+0x8C)!=r1 || U32(p,o+0x98)!=r1 ||
+                       r1==0 || r2==0 || rs==0 || (!variant && (r1<r2 || r2<rs)) ||
+                       U32(p,o+0x8C)!=U32(p,o+0x98) || (!variant && U32(p,o+0x8C)!=r1) ||
                        U32(p,o+0x9C)!=r2 || U32(p,o+0xB0)!=rs) return null;
                     var refresh=new SortedDictionary<string,uint>(StringComparer.Ordinal) {
                         ["tRFC"]=r1,["tRFC2"]=r2,["tRFCsb"]=rs
@@ -151,7 +165,7 @@ namespace ZenTimings.Cli
                     foreach(var slot in spd)
                         foreach(var f in refresh)
                             if(!slot.data.ddr5.jedec_refresh_ns.TryGetValue(f.Key,out int ns) ||
-                                Math.Abs(f.Value-ns*clk/1000.0)>1.01) return null;
+                                Math.Abs((f.Key=="tRFC"?U32(p,o+0x8C):f.Value)-ns*clk/1000.0)>1.01) return null;
                     var ex=p.Slice(eo,25);
                     if(i==0 && (!mm.Slice(1,17).SequenceEqual(ex.Slice(1,17)) ||
                                 !mm.Slice(18,4).SequenceEqual(ex.Slice(20,4)))) return null;
@@ -163,10 +177,11 @@ namespace ZenTimings.Cli
                     }
                     states.Add(new State(i,o,clk,dfi,clk*2,timings,raw,refresh,eo,Electrical(ex,true)));
                 }
+                if(g>0 && states.Count!=groups[0].states.Length) return null;
                 groups.Add(new Group(g,Electrical(mm,false),states.ToArray()));
             }
             return new Result(variant?"experimental DDR5 v0x18 same-layout candidate":"experimental DDR5 v0x18 donor configuration",gen.Offset,groups.ToArray(),
-                "Saved frequency blocks and electrical record candidates, not live measurements. Layout identified by donor structure, not CPU ID. MEM25 main and first extended record agree at mapped offsets. Refresh alternatives correlate with SPD and duplicate slots; not proof of selected UMC refresh mode. No automatic group/UMC/DIMM or P-state mapping; Gdm is saved code, not a live register interpretation. HMAC not verified.") { layout=variant?"ddr5-v0x18-same-layout-candidate":"ddr5-donor-v0x18" };
+                "Saved frequency blocks and electrical record candidates, not live measurements. Layout identified by donor structure, not CPU ID. MEM25 main and first extended record agree at mapped offsets. Refresh candidates use +84/+90/+A8; +8C/+98 retain the SPD-like RFC1 value, which can differ from +84. Nonzero standard slots may differ too. Not proof of selected UMC refresh mode. No automatic group/UMC/DIMM or P-state mapping; Gdm is saved code, not a live register interpretation. HMAC not verified.") { layout=variant?"ddr5-v0x18-same-layout-candidate":"ddr5-donor-v0x18", unused_trailing_state_slots_per_group=unused };
         }
     }
 }

@@ -343,7 +343,7 @@ class CliTest(unittest.TestCase):
             struct.pack_into("<IIII",b,0,group,kind,0,size)
             return b
         cfg=entry(1,2,256)
-        struct.pack_into("<HH",cfg,52,1200,2400)
+        struct.pack_into("<HH",cfg,52,1200,1200)
         for i,value in enumerate([24,0,0,5,0,0,0,15,15,15,15]):
             cfg[48+0x98+4*i]=value
         other=entry(1,17,120)
@@ -381,6 +381,106 @@ class CliTest(unittest.TestCase):
             self.assertEqual(details["xmp_profiles"],[])
             self.assertEqual(details["xmp_status"],"not present")
             self.assertNotIn("serial",json.dumps(details).lower())
+        # Sparse replay fixture: only the independently matched public UMC
+        # words/markers from M33KT24A, no original opaque payload or hashes.
+        gen3=entry(7,3,5356)
+        replay=entry(7,4,13904)
+        struct.pack_into("<I",replay,48+16,1454)
+        def pair(buf,offset,a,v):
+            struct.pack_into("<II",buf,48+offset,a,v)
+        pair(replay,0x20,0x1d040,2)
+        pair(replay,0x28,0x50100,0x200)
+        pair(replay,0x30,0x150100,0x200)
+        pair(replay,0x38,0xffffdead,0x16)
+        pair(replay,0x40,0xffffdead,0x14)
+        for ch in range(2):
+            off=ch<<20
+            for i,(at,a,v) in enumerate((
+                (0x7e8,0x50204,0x11112711),
+                (0x7f0,0x50214,0x0009030c),
+                (0x7f8,0x50208,0x00110038),
+                (0x800,0x5020c,0x09000807),
+                (0x808,0x50218,0x12),
+                (0x810,0x50210,0x24),
+                (0x818,0x50260,0x3049c9a5),
+                (0x820,0x5021c,0x800),
+                (0x828,0x50238,0x030001b1),
+                (0x830,0x50200,0x324),
+                (0x840,0x5022c,0x00020080),
+                (0x848,0x50230,0x2494),
+                (0x850,0x50234,0x18101808),
+                (0x858,0x50254,0x06040008),
+                (0x860,0x50244,0x3f310006),
+                (0x870,0x50258,0x021f070c),
+                (0x878,0x50250,0x00090000),
+                (0x8a8,0x50220,0x8f0f0f0f),
+                (0x8b0,0x50224,0xbf0f0f0f),
+                (0x8b8,0x50228,0x1f0f),
+                (0x9f8,0x50200,0x124),
+                (0xc88,0x5022c,0x09320080),
+                (0xcd8,0x50220,0x03010303),
+                (0xce0,0x50224,0x03010505),
+                (0xce8,0x50228,0xa00),
+                (0xd10,0x50258,0x0214070c),
+                (0x60,0x50050,0xba954321),
+                (0x80,0x500d0,0x24924001),
+                (0xe8,0x50000,1),
+                (0x2058,0x5012c,0x71100460),
+            )):
+                # Deliberately sparse, shifted second channel. Preserve
+                # ordering for each register rather than actual all offsets.
+                pair(replay,0x100+ch*0x1000+8*i,off|a,v)
+        pair(replay,0x2d88,0x1c504,3)
+        # Do not scan the opaque tail even if it contains a known address.
+        pair(replay,0x2d90,0x50204,0xdeadbeef)
+        # Synthetic common header (zeros except count), valid delimiters.
+        companions=[]
+        for t in range(10,15):
+            a=entry(1,t,2768)
+            n=329 if t<14 else 307
+            struct.pack_into("<I",a,48+16,n)
+            pair(a,0x20,0xffffdead,7+2*(t-10))
+            pair(a,0x20+n*8-16,0xffffdead,0x20)
+            pair(a,0x20+n*8-8,0xffffdead,0x17)
+            companions.append(a)
+        def with_replay(rep=replay,comps=companions,version=0x13):
+            out=h+cfg+other+spd+gen3+rep+b"".join(comps)
+            struct.pack_into("<II",out,4,version,len(out))
+            return run(prefix+out)["replay"]
+        rr=with_replay()
+        self.assertIsNotNone(rr)
+        self.assertEqual(rr["record_count"],1454)
+        self.assertEqual(rr["end_exclusive"],0x2d90)
+        self.assertEqual(rr["opaque_trailing_bytes"],2192)
+        self.assertEqual(len(rr["companions"]),5)
+        self.assertEqual(len(rr["channels"]),2)
+        for ch,c in enumerate(rr["channels"]):
+            self.assertEqual(c["umc_address_index"],ch)
+            self.assertEqual(c["nominal_mclk_mhz"],1200)
+            self.assertEqual(c["candidate_timings"]["tCL"],17)
+            self.assertEqual(c["candidate_timings"]["tRC"],56)
+            self.assertEqual(c["candidate_timings"]["tRDRDSCL"],3)
+            self.assertNotIn("tRFC",c["candidate_timings"])
+            self.assertNotIn("BGS",c["candidate_extended_fields"])
+            key=f"0x{(ch<<20)|0x50260:08X}"
+            self.assertEqual(c["refresh_word_candidates"][key],{"tRFC":421,"tRFC2":313,"tRFC4":193})
+            key=f"0x{(ch<<20)|0x50220:08X}"
+            self.assertEqual([x["word"] for x in c["observed_registers"][key]["history"]],
+                             ["0x8F0F0F0F","0x03010303"])
+            self.assertIn(f"0x{(ch<<20)|0x50264:08X}",c["missing_registers"])
+            self.assertEqual(len(c["observed_registers"]),25)
+            self.assertEqual(len(c["missing_registers"]),10)
+        bad=bytearray(replay)
+        struct.pack_into("<I",bad,48+16,0xffffffff)
+        self.assertIsNone(with_replay(rep=bad))
+        bad=bytearray(replay)
+        struct.pack_into("<I",bad,48+16,1455)
+        self.assertIsNone(with_replay(rep=bad))
+        bad=bytearray(companions[0])
+        bad[-1]=1
+        self.assertIsNone(with_replay(comps=[bad]+companions[1:]))
+        self.assertIsNone(with_replay(comps=companions+[companions[0]]))
+        self.assertIsNone(with_replay(version=0x14))
         self.assertFalse(run(prefix+table[:-1],code=1)["available"])
         self.assertFalse(run(prefix+table+table,code=1)["available"])
         self.assertFalse(run(prefix,code=1)["available"])

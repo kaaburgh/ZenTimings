@@ -237,6 +237,19 @@ namespace ZenTimings.Cli
                     Console.WriteLine($"  SPD copy: socket {slot.socket}, channel {slot.channel}, DIMM {slot.dimm}: {slot.data.status}; {slot.data.part_number}");
                     PrintSpdDetails(slot.data);
                 }
+                if(result.replay!=null)
+                {
+                    var replay=result.replay;
+                    Console.WriteLine($"  S3 replay: {replay.record_count} bounded records; offsets 0x{replay.start_offset:X}..0x{replay.end_exclusive:X} (exclusive)");
+                    foreach(var c in replay.channels)
+                    {
+                        Console.WriteLine($"    UMC address index {c.umc_address_index}: {c.observed_registers.Count} observed registers, {c.missing_registers.Length} missing; candidate MCLK {c.nominal_mclk_mhz} MHz");
+                        Console.WriteLine("    Candidate timings: "+string.Join(", ",c.candidate_timings.Select(p=>$"{p.Key}={p.Value}")));
+                        foreach(var r in c.refresh_word_candidates)
+                            Console.WriteLine("    Refresh word "+r.Key+": "+string.Join(", ",r.Value.Select(p=>$"{p.Key}={p.Value}")));
+                    }
+                    Console.WriteLine("    "+replay.note);
+                }
                 Console.WriteLine(result.note);
             }
             return result.available?0:1;

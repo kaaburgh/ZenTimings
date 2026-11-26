@@ -47,17 +47,48 @@ namespace ZenTimings.Cli
         private static string Row(string name) => name == "PowerDown" ? "PwrDwn" :
             name is "Cmd2T" or "GDM" ? name : "t"+name;
 
-        // Address list is built from a restricted subset of the pinned upstream maps.
-        // Only two UMCs on these specific client CPU groups. No arbitrary address input.
-        internal static Snapshot Capture(CpuId cpu, Func<uint,uint> read, string source, bool extended = false)
+        // Shared allowlist and pure bitfield projection. An offline partial set
+        // must never be passed into the live acquisition path as fabricated reads.
+        internal static uint[] TimingAddresses(int type)
         {
-            int type = MemoryType(cpu);
-            if (type < 0) throw new NotSupportedException("Unsupported CPUID; no SMN requests issued.");
+            if(type!=0 && type!=1) throw new ArgumentOutOfRangeException(nameof(type));
             var defs = type == 0 ? DDR4Dictionary.defs : DDR5Dictionary.defs;
-            var registers = defs.Where(p => p.Value.Any(f => Fields.Contains(f.Name)))
+            return defs.Where(p => p.Value.Any(f => Fields.Contains(f.Name)))
                 .Select(p => p.Key).Concat(new uint[]{0x50100,0x50200,0x50260,0x50264})
                 .Concat(type == 1 ? new uint[]{0x50268,0x5026C,0x502C0,0x502C4,0x502C8,0x502CC} : Array.Empty<uint>())
                 .Distinct().OrderBy(x=>x).ToArray();
+        }
+
+        internal static SortedDictionary<string,uint> DecodeKnownFields(int type,IReadOnlyDictionary<uint,uint> words)
+        {
+            var defs=type==0?DDR4Dictionary.defs:DDR5Dictionary.defs;
+            var timings=new SortedDictionary<string,uint>(StringComparer.Ordinal);
+            foreach(var p in defs)
+                if(words.TryGetValue(p.Key,out uint v))
+                    foreach(var f in p.Value.Where(f=>Fields.Contains(f.Name)))
+                        timings.Add(Row(f.Name),Bits(v,f.HiBit,f.LoBit));
+            return timings;
+        }
+
+        internal static double NominalMclk(int type,uint word) =>
+            type==0 ? Bits(word,6,0)*100.0/3 : Bits(word,15,0);
+
+        internal static SortedDictionary<string,uint> DecodeRefreshWord(int type,uint v)
+        {
+            var result=new SortedDictionary<string,uint>(StringComparer.Ordinal) {
+                ["tRFC"]=Bits(v,type==0?10:15,0),
+                ["tRFC2"]=Bits(v,type==0?21:31,type==0?11:16)
+            };
+            if(type==0) result["tRFC4"]=Bits(v,31,22);
+            return result;
+        }
+
+        // Only two UMCs on these specific client CPU groups. No arbitrary address input.
+        internal static Snapshot Capture(CpuId cpu, Func<uint,uint> read, string source, bool extended = false)
+        {
+            int type=MemoryType(cpu);
+            if(type<0) throw new NotSupportedException("Unsupported CPUID; no SMN requests issued.");
+            var registers=TimingAddresses(type);
             var channels = new List<Channel>();
             for (int i=0;i<2;i++)
             {
@@ -79,16 +110,12 @@ namespace ZenTimings.Cli
                     throw new IOException("UMC presence changed during read.");
                 if ((raw[0x50100]&3)!=type)
                     throw new InvalidDataException("UMC DRAM type does not agree with supported CPU/map.");
-                var timings=new SortedDictionary<string,uint>(StringComparer.Ordinal);
-                foreach(var p in defs)
-                    foreach(var f in p.Value.Where(f=>Fields.Contains(f.Name)))
-                        timings.Add(Row(f.Name),Bits(raw[p.Key],f.HiBit,f.LoBit));
+                var timings=DecodeKnownFields(type,raw);
                 if (timings["tCL"] < 5 || timings["tRCDRD"] < 5 || timings["tRP"] < 5 || timings["tRAS"] < 10)
                     throw new InvalidDataException("Implausible primary timings; no result published.");
                 // Same UMC ratio formula as pinned Ddr4Timings/Ddr5Timings.
                 // 100 MHz is assumed BCLK, not measured MCLK.
-                double mclk = type==0 ? Bits(raw[0x50200],6,0)*100.0/3 :
-                    Bits(raw[0x50200],15,0);
+                double mclk=NominalMclk(type,raw[0x50200]);
                 if(mclk<200 || mclk>10000) throw new InvalidDataException("Implausible memory ratio.");
                 // If several programmed refresh values differ, do not guess which rank
                 // is effective. Exclude upstream's unused/default patterns.
@@ -98,10 +125,7 @@ namespace ZenTimings.Cli
                 string refreshStatus="unavailable or ambiguous";
                 if(refresh.Length==1)
                 {
-                    uint v=refresh[0];
-                    timings["tRFC"]=Bits(v,type==0?10:15,0);
-                    timings["tRFC2"]=Bits(v,type==0?21:31,type==0?11:16);
-                    if(type==0) timings["tRFC4"]=Bits(v,31,22);
+                    foreach(var p in DecodeRefreshWord(type,refresh[0])) timings[p.Key]=p.Value;
                     refreshStatus="one distinct non-default refresh word";
                 }
                 if(type==1)

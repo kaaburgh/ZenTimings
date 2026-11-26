@@ -32,16 +32,31 @@ namespace ZenTimings.Cli
         private static uint Bits(uint value,int high,int low) =>
             (value >> low) & (uint)((1UL << (high-low+1))-1);
 
-        internal static Result Capture(int type,uint offset, IReadOnlyDictionary<uint,uint> basic,
-            IReadOnlyDictionary<string,uint> timings,double nominalMclk,Func<uint,uint> read)
+        internal static uint[] Addresses(int type)
         {
             if(type!=0 && type!=1) throw new ArgumentOutOfRangeException(nameof(type));
             var defs=type==0?DDR4Dictionary.defs:DDR5Dictionary.defs;
             uint[] bgs={0x50050,0x50058,0x500D0,0x500D4};
-            var addresses=defs.Where(p=>p.Value.Any(f=>ExtraFields.Contains(f.Name))).Select(p=>p.Key)
+            return defs.Where(p=>p.Value.Any(f=>ExtraFields.Contains(f.Name))).Select(p=>p.Key)
                 .Concat(bgs).Concat(type==1?new uint[]{0x50284}:Array.Empty<uint>())
                 .Append(0x5012Cu).Distinct().OrderBy(x=>x).ToArray();
+        }
+
+        internal static SortedDictionary<string,uint> DecodeKnownFields(int type,IReadOnlyDictionary<uint,uint> words)
+        {
+            var defs=type==0?DDR4Dictionary.defs:DDR5Dictionary.defs;
             var fields=new SortedDictionary<string,uint>(StringComparer.Ordinal);
+            foreach(var p in defs)
+                if(words.TryGetValue(p.Key,out uint value))
+                    foreach(var f in p.Value.Where(f=>ExtraFields.Contains(f.Name)))
+                        fields.Add(f.Name,Bits(value,f.HiBit,f.LoBit));
+            return fields;
+        }
+
+        internal static Result Capture(int type,uint offset, IReadOnlyDictionary<uint,uint> basic,
+            IReadOnlyDictionary<string,uint> timings,double nominalMclk,Func<uint,uint> read)
+        {
+            var addresses=Addresses(type);
             var words=new Dictionary<uint,uint>();
             var registers=new SortedDictionary<string,string>(StringComparer.Ordinal);
             var unavailable=new SortedDictionary<string,string>(StringComparer.Ordinal);
@@ -69,10 +84,7 @@ namespace ZenTimings.Cli
                 { words.Remove(a); unavailable[Address(a)]=ex.Message; }
             }
             foreach(var p in words) registers[Address(p.Key)]=$"0x{p.Value:X8}";
-            foreach(var p in defs)
-                if(words.TryGetValue(p.Key,out uint value))
-                    foreach(var f in p.Value.Where(f=>ExtraFields.Contains(f.Name)))
-                        fields.Add(f.Name,Bits(value,f.HiBit,f.LoBit));
+            var fields=DecodeKnownFields(type,words);
 
             // Same pattern test as BaseDramTimings.ReadBankGroupSwap. An all-zero
             // BGS pair is left unresolved rather than advertising Enabled.

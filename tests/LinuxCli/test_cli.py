@@ -826,6 +826,39 @@ class CliTest(unittest.TestCase):
         pmu3=bytearray(pmu)
         struct.pack_into("<H",pmu3,48+stride+2,3200)
         self.assertFalse(run(comps=phases,extra=pmu3)["ddr5_training_structure"]["pmu_smb"]["both_rate_words_match_highest_gen"])
+        # Synthetic four-slot DDR5 APCB boot-info layout. Use fake
+        # serials only; this report must not reveal even matching identities.
+        ids=bytearray(spd)
+        boot=entry(1,16,120)
+        struct.pack_into("<I",boot,48,0x60)
+        for ch,serial in enumerate((b"ABCD",b"WXYZ")):
+            d=48+4+ch*1036+12
+            ids[d+517:d+521]=serial
+            o=48+4+ch*24
+            boot[o:o+2]=ids[d+512:d+514]
+            boot[o+2:o+4]=ids[d+552:d+554]
+            boot[o+4:o+8]=serial
+            boot[o+8]=1
+        struct.pack_into("<I",boot,48+56,1234567)
+        boot[48+60:48+68]=b"PRIVATE!"
+        info=run(ss=ids,extra=boot)["ddr5_boot_info"]
+        self.assertIsNotNone(info)
+        self.assertEqual(info["present_slot_indices"],[0,2])
+        self.assertTrue(info["both_spd_identity_matches"])
+        self.assertEqual(info["last_pmu_train_time_raw"],1234567)
+        self.assertFalse(info["dimm_configuration_updated_candidate"])
+        # Changes to private words, including mutually matching serials,
+        # do not alter the exported metadata.
+        masked=bytearray(boot)
+        masked[48+60:48+68]=b"SECRET!!"
+        self.assertEqual(run(ss=ids,extra=masked)["ddr5_boot_info"],info)
+        ids2=bytearray(ids)
+        ids2[48+4+12+517:48+4+12+521]=b"TEST"
+        self.assertIsNone(run(ss=ids2,extra=masked)["ddr5_boot_info"])
+        masked[48+8:48+12]=b"TEST"
+        self.assertEqual(run(ss=ids2,extra=masked)["ddr5_boot_info"],info)
+        self.assertIsNone(run(ss=ids,extra=boot+boot)["ddr5_boot_info"])
+        self.assertIsNone(run(ss=ids,rr=bad,extra=boot)["ddr5_boot_info"])
 
     def test_apob_directory_metadata(self):
         import struct

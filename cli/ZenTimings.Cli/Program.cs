@@ -237,6 +237,20 @@ namespace ZenTimings.Cli
                     Console.WriteLine($"  SPD copy: socket {slot.socket}, channel {slot.channel}, DIMM {slot.dimm}: {slot.data.status}; {slot.data.part_number}");
                     PrintSpdDetails(slot.data);
                 }
+                if(result.gen_config!=null)
+                {
+                    Console.WriteLine("  GEN configuration: saved frequency blocks (no channel association)");
+                    foreach(var g in result.gen_config.groups)
+                    {
+                        foreach(var s in g.states)
+                        {
+                            Console.WriteLine($"    Group {g.group_index} state {s.state_index}: DDR4-{s.nominal_rate_mts}, {s.memclk_mhz} MHz");
+                            Console.WriteLine("    Timings: "+string.Join(", ",s.timings_clocks.Select(p=>$"{p.Key}={p.Value}")));
+                            Console.WriteLine($"    MR0..6: {string.Join(" ",s.mode_registers.words)}; VrefDQ {s.mode_registers.initial_vref_dq_percent_vddq}% VDDQ (saved)");
+                        }
+                    }
+                    Console.WriteLine("    "+result.gen_config.note);
+                }
                 if(result.replay!=null)
                 {
                     var replay=result.replay;

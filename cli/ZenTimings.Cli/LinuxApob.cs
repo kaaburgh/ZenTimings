@@ -25,6 +25,7 @@ namespace ZenTimings.Cli
         {
             public string image_offset { get; init; }
             public ApobReplay.Result replay { get; init; }
+            public ApobLegacyConfig.Result gen_config { get; init; }
         }
         private const string Note="APOB is firmware boot/training data, not a live sensor. Layouts inherited from pinned ZenStates-Core; HMAC not verified. No raw bytes or serial numbers exported. No automatic UMC association.";
         private static uint U32(byte[] b,int o)=>BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(o,4));
@@ -130,7 +131,8 @@ namespace ZenTimings.Cli
             }
             return new Result(true,"structurally parsed, experimental",source,address,h.version,(uint)h.size,(uint)h.header,
                 entries,electrical.ToArray(),spd.ToArray(),diagnostics.ToArray(),Note) {
-                    replay=ApobReplay.Decode(b,raw,h.version,h.header,validatedLegacySpd)
+                    replay=ApobReplay.Decode(b,raw,h.version,h.header,validatedLegacySpd),
+                    gen_config=ApobLegacyConfig.Decode(b,raw,h.version,h.header,validatedLegacySpd,electrical)
                 };
         }
 

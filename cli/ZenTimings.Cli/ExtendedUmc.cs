@@ -50,6 +50,15 @@ namespace ZenTimings.Cli
                 if(words.TryGetValue(p.Key,out uint value))
                     foreach(var f in p.Value.Where(f=>ExtraFields.Contains(f.Name)))
                         fields.Add(f.Name,Bits(value,f.HiBit,f.LoBit));
+            if(type==1 && words.TryGetValue(0x50284,out uint n))
+            {
+                fields["NitroRxData"]=Bits(n,9,8);
+                fields["NitroTxData"]=Bits(n,5,4);
+                fields["NitroCtrlLine"]=Bits(n,1,0);
+                fields["NitroRxDatChnDlyMode"]=Bits(n,18,18);
+                fields["NitroTxDatChnDlyMode"]=Bits(n,17,17);
+                fields["NitroCtrlLineDlyMode"]=Bits(n,16,16);
+            }
             return fields;
         }
 
@@ -126,14 +135,8 @@ namespace ZenTimings.Cli
                 }
             }
             string nitro=null;
-            if(type==1 && words.TryGetValue(0x50284,out uint n))
+            if(type==1 && words.ContainsKey(0x50284))
             {
-                fields["NitroRxData"]=Bits(n,9,8);
-                fields["NitroTxData"]=Bits(n,5,4);
-                fields["NitroCtrlLine"]=Bits(n,1,0);
-                fields["NitroRxDatChnDlyMode"]=Bits(n,18,18);
-                fields["NitroTxDatChnDlyMode"]=Bits(n,17,17);
-                fields["NitroCtrlLineDlyMode"]=Bits(n,16,16);
                 nitro=$"{fields["NitroRxData"]}/{fields["NitroTxData"]}/{fields["NitroCtrlLine"]}";
             }
             return new Result(unavailable.Count==0?"complete":"partial",fields,registers,unavailable,

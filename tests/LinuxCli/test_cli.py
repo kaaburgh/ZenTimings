@@ -999,6 +999,94 @@ class CliTest(unittest.TestCase):
         self.assertFalse(d["base_crc_valid"])
         self.assertIsNone(d["ddr5"])
 
+    def test_drfxi_ram_spi_comparison(self):
+        import binascii, struct
+        # Only observed entry lengths and IDs, synthetic contents throughout.
+        entries=[
+            (7,23,56),(7,26,4144),(9,9,496),(8,8,216),(0x10001,15,88),
+            (1,16,120),(0x10009,24,304),(0x10009,21,308),(0x10009,19,52),
+            (1,2,732),(1,25,96),(0x10001,1,56),(7,3,6020),(1,27,64),
+            (1,28,204),(7,4,15312),(1,5,16432),(1,18,140),(0x10003,1,100),
+            (0x10003,2,88),(3,3,456),(7,6,1076),(1,17,4196),(1,22,1012),
+            (1,30,10320),(1,31,10320)]
+        table=bytearray(0xa8)
+        offsets={}
+        for g,t,n in entries:
+            offsets[g,t]=len(table)
+            table.extend(struct.pack("<IIII",g,t,0,n)+bytes(n-16))
+        self.assertEqual(len(table),72576)
+        struct.pack_into("<4I",table,0,0x424f5041,0x18,len(table),0xa8)
+        base=offsets[1,17]+48
+        table[base:base+2]=bytes((1,2))
+        for ch in range(2):
+            slot=base+4+1036*ch
+            table[slot+1]=1
+            table[slot+9]=ch
+            d=slot+12
+            table[d+2]=0x12
+            struct.pack_into("<H",table,d+510,binascii.crc_hqx(table[d:d+510],0))
+            table[d+517:d+521]=b"PRIV"
+            table[d+521:d+551]=b"PRIVATE-MODULE".ljust(30)
+        img=bytearray(32*1024*1024)
+        img[0x125000:0x125000+len(table)]=table
+        directory=struct.pack("<II",18,0)+struct.pack("<IIQQ",0x61,0,0,0xa200000)+struct.pack("<IIQQ",0x20000063,0x28000,(1<<62)|0x125000,2**64-1)+bytes(24*16)
+        a=z=65535
+        for (w,) in struct.iter_unpack("<H",directory):
+            a=(a+w)%65535
+            z=(z+a)%65535
+        directory=b"$BL2"+struct.pack("<I",((z or 65535)<<16)|(a or 65535))+directory
+        for o in (0x51d000,0x8e5000):
+            img[o:o+len(directory)]=directory
+        afu=self.root/"private-afu.bin"
+        ram=self.root/"private-ram.bin"
+        afu.write_bytes(img)
+        def run(b,code=0):
+            ram.write_bytes(b)
+            p=self.invoke("--apob-compare-image",str(afu),"--apob-compare-file",str(ram),"--json",code=code,live=False)
+            self.assertEqual(ram.read_bytes(),b)
+            if code: return p
+            self.assertNotIn("PRIV",p.stdout)
+            self.assertNotIn("private-afu",p.stdout)
+            self.assertNotIn("private-ram",p.stdout)
+            return json.loads(p.stdout)
+        j=run(table)
+        self.assertTrue(j["table_equal"])
+        self.assertTrue(j["entry_layout_equal"])
+        self.assertTrue(j["same_spd_identities"])
+        self.assertEqual(len(j["known_records"]),12)
+        changed=bytearray(table)
+        changed[offsets[1,5]+48+123]^=1
+        changed[0x90]^=1 # header (authentication/unknown), equality only
+        changed[ offsets[1,16]+48+56 ]^=1 # date word, equality only
+        j=run(changed)
+        self.assertFalse(j["table_equal"])
+        self.assertFalse(j["header_equal"])
+        self.assertTrue(j["entry_layout_equal"])
+        rows={r["name"]:r for r in j["known_records"]}
+        self.assertEqual(rows["PMU SMB"]["changed_payload_bytes"],1)
+        self.assertFalse(rows["APCB boot info"]["training_date_word_equal"])
+        self.assertIsNone(rows["APCB boot info"]["changed_payload_bytes"])
+        self.assertIsNone(rows["SPD"]["changed_payload_bytes"])
+        # Different unknown-entry type remains a legitimate layout difference.
+        different=bytearray(table)
+        struct.pack_into("<I",different,offsets[7,23]+4,99)
+        self.assertFalse(run(different)["entry_layout_equal"])
+        # Reject identity mismatch, duplicate entry, CRC failure and wrong length.
+        bad=bytearray(table);bad[base+4+12+517]^=1
+        self.assertIn("identities do not match",run(bad,code=1).stderr)
+        bad=bytearray(table);bad[base+4+12+20]^=1
+        self.assertIn("CRC mismatch",run(bad,code=1).stderr)
+        bad=bytearray(table);struct.pack_into("<II",bad,offsets[7,23],1,17)
+        self.assertIn("Ambiguous",run(bad,code=1).stderr)
+        run(table[:-1],code=1)
+        self.assertEqual(afu.read_bytes(),img)
+        bad_img=bytearray(img);bad_img[0x8e5000+4]^=1
+        afu.write_bytes(bad_img)
+        self.assertIn("directory",run(table,code=1).stderr)
+        self.assertEqual(afu.read_bytes(),bad_img)
+        self.invoke("--apob-compare-file",str(ram),code=2,live=False)
+        self.invoke("--apob-compare-image",str(afu),"--apob",code=2,live=False)
+
     def test_arguments_and_non_uefi(self):
         self.invoke("--debug", "--json", code=2)
         self.invoke("--board", "X670E Steel Legend", "--bios", "1.21", code=2)

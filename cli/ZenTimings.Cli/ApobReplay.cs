@@ -129,7 +129,7 @@ namespace ZenTimings.Cli
                     U32(q,32)!=0xDEAD || U32(q,36)!=0xB) return null;
                 companions.Add(new Companion(t,count,stop,0xB));
             }
-            return DecodeWords(p,replay,n,end,companions.ToArray(),1,"ddr5-donor-v0x18");
+            return DecodeWords(p,replay,n,end,companions.ToArray(),1,config.layout);
         }
 
         private static Result DecodeWords(ReadOnlySpan<byte> p,ApobEntry replay,int n,int end,

@@ -699,6 +699,50 @@ class CliTest(unittest.TestCase):
             self.assertEqual(c["candidate_timings"]["GDM"],1)
             self.assertEqual(c["refresh_word_candidates"][f'0x{(c["umc_address_index"]<<20)|0x50260:08X}'],{"tRFC":708,"tRFC2":384})
             self.assertEqual(c["refresh_word_candidates"][f'0x{(c["umc_address_index"]<<20)|0x502c0:08X}'],{"tRFCsb":312})
+        self.assertEqual(cfg["layout"],"ddr5-donor-v0x18")
+        self.assertEqual(len(cfg["replay_correlation"]["matched_primary_fields"]),15)
+        # A wholly synthetic 6000 MT/s variant, NOT hardware evidence.
+        # Keep layout, lengths, markers, SPD-derived alternative slots and
+        # independently modify the highest GEN state and both replay blocks.
+        tuned=bytearray(gen)
+        for g in range(2):
+            o=48+0x630+g*0x7a0
+            for off,v in ((0,3000),(4,1500),(0x0c,36),(0x10,40),(0x14,40),
+                          (0x18,40),(0x1c,76),(0x24,34),(0x6c,11677),
+                          (0x84,885),(0x8c,885),(0x98,885),
+                          (0x90,480),(0x9c,480),(0xa8,390),(0xb0,390),
+                          (0x88,480),(0x94,400),(0xac,300)):
+                struct.pack_into("<I",tuned,o+off,v)
+        tuned_rep=bytearray(rep)
+        values={0x50200:0x80050bb8,0x50204:0x28284c24,0x50208:0x00280074,
+                0x50214:0x00180622,0x50230:0x00302d9d,0x50260:0x019001e0,0x502c0:0x0048012c}
+        for o in range(48+32,48+0x21e8,8):
+            addr=struct.unpack_from("<I",tuned_rep,o)[0]&~0x100000
+            if addr in values:
+                struct.pack_into("<I",tuned_rep,o+4,values[addr])
+        j=run(config=tuned,rr=tuned_rep)
+        vc=j["ddr5_config"]
+        self.assertIsNotNone(vc)
+        self.assertEqual(vc["layout"],"ddr5-v0x18-same-layout-candidate")
+        self.assertEqual(j["replay"]["layout"],vc["layout"])
+        self.assertEqual(vc["groups"][0]["states"][0]["nominal_rate_mts"],6000)
+        self.assertEqual(vc["groups"][0]["states"][0]["timings_clocks"]["tCL"],36)
+        self.assertEqual(vc["groups"][0]["states"][0]["refresh_candidates_clocks"],{"tRFC":885,"tRFC2":480,"tRFCsb":390})
+        self.assertEqual(vc["replay_correlation"]["matching_refresh_candidates"],{"tRFC":480,"tRFC2":400,"tRFCsb":300})
+        self.assertIsNone(run(config=tuned)["ddr5_config"]) # old replay incompatible
+        # One UMC contradicts the saved state: reject whole variant.
+        wrong=bytearray(tuned_rep)
+        for o in range(48+32,48+0x21e8,8):
+            if struct.unpack_from("<I",wrong,o)[0]==0x150204:
+                struct.pack_into("<I",wrong,o+4,0x28284c25)
+        j=run(config=tuned,rr=wrong)
+        self.assertIsNone(j["ddr5_config"])
+        self.assertIsNone(j["replay"])
+        wrong=bytearray(tuned_rep)
+        for o in range(48+32,48+0x21e8,8):
+            if struct.unpack_from("<I",wrong,o)[0]==0x150260:
+                struct.pack_into("<I",wrong,o+4,0x019001e1)
+        self.assertIsNone(run(config=tuned,rr=wrong)["ddr5_config"])
         bad=bytearray(gen)
         struct.pack_into("<I",bad,48+0x630+0x84,709)
         self.assertIsNone(run(config=bad)["ddr5_config"])

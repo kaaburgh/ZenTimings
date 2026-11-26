@@ -149,7 +149,7 @@ namespace ZenTimings.Cli
                         if(words.TryGetValue(a,out uint v))
                             refresh[Hex(a|offset)]=new SortedDictionary<string,uint>{["tRFCsb"]=v&0x7FF};
                 channels.Add(new Channel(ch,mclk,regs,known.Where(a=>!words.ContainsKey(a)).Select(a=>Hex(a|offset)).ToArray(),
-                    timings,ExtendedUmc.DecodeKnownFields(0,words),refresh));
+                    timings,ExtendedUmc.DecodeKnownFields(type,words),refresh));
             }
             return new Result("experimental bounded replay observations",replay.Offset,n,32,end,p.Length-end,
                 markers,companions,channels.ToArray(),

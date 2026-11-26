@@ -46,7 +46,8 @@ namespace ZenTimings.Cli
             var replay=Unique(7,4,13904);
             if(replay==null || Unique(7,3,5356)==null) return null;
             var p=Payload(b,replay);
-            if(!Bounds(p,out int n,out int end) || n<6 ||
+            if(!Bounds(p,out int n,out int end) || n!=1454 ||
+               U32(p,end-8)!=0x1C504 || U32(p,end-4)!=3 ||
                U32(p,32)!=0x1D040 || U32(p,40)!=0x50100 || U32(p,48)!=0x150100 ||
                U32(p,56)!=0xFFFFDEAD || U32(p,60)!=0x16 ||
                U32(p,64)!=0xFFFFDEAD || U32(p,68)!=0x14) return null;
@@ -56,7 +57,7 @@ namespace ZenTimings.Cli
                 var e=Unique(1,t,2768);
                 if(e==null) return null;
                 var q=Payload(b,e);
-                if(!Bounds(q,out int count,out int stop) || count<3 ||
+                if(!Bounds(q,out int count,out int stop) || count!=(t<14?329:307) ||
                    !q.Slice(0,8).SequenceEqual(p.Slice(0,8)) ||
                    !q.Slice(12,4).SequenceEqual(p.Slice(12,4)) ||
                    !q.Slice(20,12).SequenceEqual(p.Slice(20,12)) ||

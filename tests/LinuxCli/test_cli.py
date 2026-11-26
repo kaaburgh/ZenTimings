@@ -632,6 +632,7 @@ class CliTest(unittest.TestCase):
                 (0x50218,0x48),(0x50220,0x05010606),(0x50224,0x11010f0f),
                 (0x50228,0x1007),(0x50230,0x302483),(0x50260,0x018002c4),
                 (0x502c0,0x00480138),(0x50284,0x00000220),
+                (0x50198,0x68),(0x502e0,0x11),
             )):
                 pair(rep,0x100+ch*0x1000+i*8,a|(ch<<20),v)
         pair(rep,0x21e0,0x6a3b4,0x437)
@@ -701,6 +702,13 @@ class CliTest(unittest.TestCase):
             self.assertEqual(c["refresh_word_candidates"][f'0x{(c["umc_address_index"]<<20)|0x502c0:08X}'],{"tRFCsb":312})
         self.assertEqual(cfg["layout"],"ddr5-donor-v0x18")
         self.assertEqual(len(cfg["replay_correlation"]["matched_primary_fields"]),15)
+        anchors=cfg["replay_correlation"]["optional_ccdl_anchors"]
+        self.assertEqual(len(anchors),4)
+        for ch in range(2):
+            self.assertEqual(anchors[2*ch],{"umc_address_index":ch,"field":"tCCDL",
+                "gen_value":12,"replay_derived_value":18,"matches":False})
+            self.assertEqual(anchors[2*ch+1],{"umc_address_index":ch,"field":"tCCDL_WR2",
+                "gen_value":24,"replay_derived_value":24,"matches":True})
         # A wholly synthetic 6000 MT/s variant, NOT hardware evidence.
         # Keep layout, lengths, markers, SPD-derived alternative slots and
         # independently modify the highest GEN state and both replay blocks.

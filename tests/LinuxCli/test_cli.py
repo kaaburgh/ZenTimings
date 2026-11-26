@@ -581,9 +581,14 @@ class CliTest(unittest.TestCase):
                 for off in (0xa8,0xb0):
                     struct.pack_into("<I",gen,o+off,refresh[2])
                 e=48+base+0x58f+i*0x1a
-                gen[e:e+26]=bytes.fromhex(
-                    "00000000060605000000010705070c1c0c1e1e1e5d5834340100" if i==0 else
-                    "0000040404010000010505070c1e0c1e1e1e633f2727000000")
+                ext=bytes.fromhex((
+                    "00000000060605000000010705070c1c0c1e1e1e5d5834340100",
+                    "000000040404010000010505070c1e0c1e1e1e633f2727000000",
+                    "0000040404010000010505070c1e0c1e1e1e633f272700000000",
+                )[i])
+                self.assertEqual(len(ext),26)
+                gen[e:e+26]=ext
+        self.assertEqual(len(gen),6020)
         rep=entry(7,4,15312)
         def pair(buf,offset,a,v):
             struct.pack_into("<II",buf,48+offset,a,v)

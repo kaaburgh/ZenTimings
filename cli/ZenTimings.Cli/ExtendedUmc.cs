@@ -38,7 +38,7 @@ namespace ZenTimings.Cli
             var defs=type==0?DDR4Dictionary.defs:DDR5Dictionary.defs;
             uint[] bgs={0x50050,0x50058,0x500D0,0x500D4};
             return defs.Where(p=>p.Value.Any(f=>ExtraFields.Contains(f.Name))).Select(p=>p.Key)
-                .Concat(bgs).Concat(type==1?new uint[]{0x50284}:Array.Empty<uint>())
+                .Concat(bgs).Concat(type==1?new uint[]{0x50284,0x50198,0x502E0}:Array.Empty<uint>())
                 .Append(0x5012Cu).Distinct().OrderBy(x=>x).ToArray();
         }
 
@@ -58,6 +58,14 @@ namespace ZenTimings.Cli
                 fields["NitroRxDatChnDlyMode"]=Bits(n,18,18);
                 fields["NitroTxDatChnDlyMode"]=Bits(n,17,17);
                 fields["NitroCtrlLineDlyMode"]=Bits(n,16,16);
+            }
+            // Upstream Apob.cs uses these two register fields as CCDL comparison anchors.
+            if(type==1)
+            {
+                if(words.TryGetValue(0x50198,out uint gap) && gap!=uint.MaxValue)
+                    fields["RdBrstGap"]=Bits(gap,7,3);
+                if(words.TryGetValue(0x502E0,out uint ccdl) && ccdl!=uint.MaxValue && Bits(ccdl,5,0)!=0)
+                    fields["CcdlWr2Raw"]=Bits(ccdl,5,0);
             }
             return fields;
         }

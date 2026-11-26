@@ -17,8 +17,12 @@ namespace ZenTimings.Cli
             SortedDictionary<string,uint> refresh_slot_words,SortedDictionary<string,uint> refresh_candidates_clocks,
             int payload_electrical_offset,SortedDictionary<string,LinuxApob.Value> electrical_candidates);
         internal sealed record Group(int group_index,SortedDictionary<string,LinuxApob.Value> mem25_record,State[] states);
+        internal sealed record CcdlAnchor(int umc_address_index,string field,uint gen_value,uint replay_derived_value,bool matches);
         internal sealed record ReplayCorrelation(int[] umc_address_indices,string[] matched_primary_fields,
-            SortedDictionary<string,uint> matching_refresh_candidates,string note);
+            SortedDictionary<string,uint> matching_refresh_candidates,string note)
+        {
+            public CcdlAnchor[] optional_ccdl_anchors { get; init; }
+        }
         internal sealed record Result(string status,uint entry_offset,Group[] groups,string note)
         {
             public string layout { get; init; }
@@ -91,8 +95,22 @@ namespace ZenTimings.Cli
                    !c.refresh_word_candidates.Values.Any(w=>
                         w.TryGetValue("tRFCsb",out uint a) && a==expected["tRFCsb"])) return null;
             }
+            // These are the same heuristic comparison formulas as upstream
+            // Apob.cs. They are optional evidence, never acceptance gates.
+            var anchors=new List<CcdlAnchor>();
+            foreach(var c in replay.channels)
+            {
+                void Add(string field,string rawField,uint bias)
+                {
+                    if(!c.candidate_extended_fields.TryGetValue(rawField,out uint raw)) return;
+                    uint gen=state.timings_clocks[field],derived=raw+bias;
+                    anchors.Add(new CcdlAnchor(c.umc_address_index,field,gen,derived,gen==derived));
+                }
+                Add("tCCDL","RdBrstGap",5);
+                Add("tCCDL_WR2","CcdlWr2Raw",7);
+            }
             return new ReplayCorrelation(replay.channels.Select(x=>x.umc_address_index).ToArray(),fields,expected,
-                "Highest saved GEN state matches both UMC replay address blocks in 15 primary/secondary/refresh-interval fields and complete observed tRFC/tRFC2 and tRFCsb candidates. Nonzero standard refresh slots compared preferentially, otherwise alternate slots (+84/+90/+A8), which may include tuned values. No proof of active state, effective refresh selection, physical group mapping or present hardware.");
+                "Highest saved GEN state matches both UMC replay address blocks in 15 primary/secondary/refresh-interval fields and complete observed tRFC/tRFC2 and tRFCsb candidates. Nonzero standard refresh slots compared preferentially, otherwise alternate slots (+84/+90/+A8), which may include tuned values. No proof of active state, effective refresh selection, physical group mapping or present hardware.") { optional_ccdl_anchors=anchors.ToArray() };
         }
 
         internal static Result Decode(byte[] b,List<ApobEntry> entries,uint version,int header,IReadOnlyList<LinuxApob.SpdSlot> spd,bool variant=false)

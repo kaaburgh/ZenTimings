@@ -134,6 +134,7 @@ internal static class Program
             r[0x500D4]=1u<<4;
             r[0x50234]=0x0000120A;
             r[0x50284]=0x00050231;
+            if(ddr5) { r[0x50198]=0x68; r[0x502E0]=0x11; }
             r[0x5012C]=ddr5?0u:1u<<16;
             var c=RunningTimings.Capture(cpu,a=>r[a],"extended fixture",true).Channels[0];
             var x=c.Extended;
@@ -145,6 +146,7 @@ internal static class Program
             if(ddr5)
             {
                 Check(x.nitro=="2/3/1","Nitro order");
+                Check(x.fields["RdBrstGap"]==13 && x.fields["CcdlWr2Raw"]==17,"CCDL anchor fields");
                 Check(x.fields["NitroRxDatChnDlyMode"]==1 && x.fields["NitroTxDatChnDlyMode"]==0 &&
                     x.fields["NitroCtrlLineDlyMode"]==1,"Nitro delay mode bits");
                 r[0x5012C]=2;

@@ -37,7 +37,7 @@ namespace ZenTimings.Cli
             {
                 b = firmware.Read(variable.Name, variable.Guid)?.Payload;
             }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
             {
                 return Unavailable("AmdSetupRPL read failed: " + ex.GetType().Name + ".");
             }

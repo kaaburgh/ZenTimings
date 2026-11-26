@@ -136,7 +136,7 @@ namespace ZenTimings.Cli
                 entries,electrical.ToArray(),spd.ToArray(),diagnostics.ToArray(),Note) {
                     replay=ApobReplay.Decode(b,raw,h.version,h.header,validatedLegacySpd) ?? ApobReplay.DecodeDdr5(b,raw,ddr5Config),
                     ddr5_config=ddr5Config,
-                    gen_config=ApobLegacyConfig.Decode(b,raw,h.version,h.header,validatedLegacySpd,electrical)
+                    gen_config=ApobLegacyConfig.Decode(b,raw,h.version,h.header,validatedLegacySpd,electrical,spd)
                 };
         }
 

@@ -839,13 +839,19 @@ class CliTest(unittest.TestCase):
             boot[o+2:o+4]=ids[d+552:d+554]
             boot[o+4:o+8]=serial
             boot[o+8]=1
-        struct.pack_into("<I",boot,48+56,1234567)
+        struct.pack_into("<I",boot,48+56,0x00241231)
         boot[48+60:48+68]=b"PRIVATE!"
         info=run(ss=ids,extra=boot)["ddr5_boot_info"]
         self.assertIsNotNone(info)
         self.assertEqual(info["present_slot_indices"],[0,2])
         self.assertTrue(info["both_spd_identity_matches"])
-        self.assertEqual(info["last_pmu_train_time_raw"],1234567)
+        self.assertEqual(info["last_training_date_candidate"],"2024-12-31")
+        self.assertEqual(info["last_training_date_encoding"],"BCD")
+        ambiguous=bytearray(boot)
+        struct.pack_into("<I",ambiguous,48+56,0x00120512)
+        candidate=run(ss=ids,extra=ambiguous)["ddr5_boot_info"]
+        self.assertIsNone(candidate["last_training_date_candidate"])
+        self.assertEqual(candidate["last_training_date_encoding"],"ambiguous")
         self.assertFalse(info["dimm_configuration_updated_candidate"])
         # Changes to private words, including mutually matching serials,
         # do not alter the exported metadata.

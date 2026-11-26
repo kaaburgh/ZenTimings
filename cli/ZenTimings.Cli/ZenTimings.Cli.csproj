@@ -36,5 +36,6 @@
     <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Profiles/Ddr5ExpoProfile.cs" Link="Upstream/Hardware/DRAM/DDR5/Profiles/Ddr5ExpoProfile.cs" />
     <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Hub/Spd5118HubInfo.cs" Link="Upstream/Hardware/DRAM/DDR5/Hub/Spd5118HubInfo.cs" />
     <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Thermal/Ddr5ThermalData.cs" Link="Upstream/Hardware/DRAM/DDR5/Thermal/Ddr5ThermalData.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/Apob/ApobDdr4ModeRegisters.cs" Link="Upstream/Hardware/Apob/ApobDdr4ModeRegisters.cs" />
   </ItemGroup>
 </Project>

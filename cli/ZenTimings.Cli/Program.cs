@@ -28,6 +28,7 @@ namespace ZenTimings.Cli
               zentimings --modules [--json]
               zentimings --apob [--json]
               zentimings --apob-file FILE [--json]
+              zentimings --apob-image FILE [--json]
               zentimings --debug
               zentimings --replay FILE [--board BOARD --bios VERSION] [--json]
               zentimings --help
@@ -38,6 +39,7 @@ namespace ZenTimings.Cli
             Do not run other SMN clients concurrently. Nominal clocks assume 100 MHz BCLK.
             --apob: explicit read-only attempt at known reserved APOB addresses; respects kernel access restrictions.
             --apob-file: offline parsing of an existing complete APOB binary.
+            --apob-image: find a unique validated persisted APOB in an existing SPI image file.
             --modules: SMBIOS DIMM inventory and already-bound SPD EEPROMs (no I2C probing).
             --extended: additional UMC fields, BGS, refresh mode and DDR5 Nitro.
             --pm-table: experimental Picasso SMU telemetry; no configured clock substitution.
@@ -49,7 +51,7 @@ namespace ZenTimings.Cli
             try
             {
                 bool json = false, debug = false, origins = false, timings = false, compare = false, pmTable = false, extended = false, modules = false, apob = false;
-                string apobFile = null, replay = null, board = null, bios = null, root = "/sys";
+                string apobImage = null, apobFile = null, replay = null, board = null, bios = null, root = "/sys";
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 for (int i = 0; i < args.Length; i++)
                 {
@@ -70,6 +72,7 @@ namespace ZenTimings.Cli
                         case "--modules": modules = true; break;
                         case "--apob": apob = true; break;
                         case "--apob-file": apobFile = Next(); break;
+                        case "--apob-image": apobImage = Next(); break;
                         case "--replay": replay = Next(); break;
                         case "--board": board = Next(); break;
                         case "--bios": bios = Next(); break;
@@ -77,12 +80,12 @@ namespace ZenTimings.Cli
                         default: throw new ArgumentException("Unknown option: " + arg);
                     }
                 }
-                if(apobFile!=null)
+                if(apobFile!=null || apobImage!=null)
                 {
-                    if(apob || modules || pmTable || extended || timings || compare || origins || debug ||
+                    if((apobFile!=null && apobImage!=null) || apob || modules || pmTable || extended || timings || compare || origins || debug ||
                         replay!=null || board!=null || bios!=null || seen.Contains("--sysfs-root"))
-                        throw new ArgumentException("--apob-file is offline and standalone.");
-                    return PrintApob(LinuxApob.ReadFile(apobFile),json);
+                        throw new ArgumentException("--apob-file and --apob-image are offline, standalone and mutually exclusive.");
+                    return PrintApob(apobImage!=null?LinuxApob.ReadImage(apobImage):LinuxApob.ReadFile(apobFile),json);
                 }
                 if(apob && (origins || debug || replay!=null || seen.Contains("--sysfs-root") ||
                     ((modules || pmTable) && !(timings || compare))))
@@ -222,6 +225,7 @@ namespace ZenTimings.Cli
                 Console.WriteLine("APOB: "+result.status);
                 if(result.available)
                     Console.WriteLine($"  {result.source}; address {result.address??"-"}; version 0x{result.version:X}; {result.table_size} bytes; {result.entries.Length} entries");
+                if(result.image_offset!=null) Console.WriteLine("  SPI image offset: "+result.image_offset);
                 foreach(var d in result.diagnostics) Console.WriteLine("  "+d);
                 foreach(var c in result.electrical)
                 {
@@ -229,7 +233,10 @@ namespace ZenTimings.Cli
                     foreach(var p in c.settings) Console.WriteLine($"    {p.Key,-20} {p.Value.display} (code {p.Value.code})");
                 }
                 foreach(var slot in result.spd)
+                {
                     Console.WriteLine($"  SPD copy: socket {slot.socket}, channel {slot.channel}, DIMM {slot.dimm}: {slot.data.status}; {slot.data.part_number}");
+                    PrintDdr4Details(slot.data);
+                }
                 Console.WriteLine(result.note);
             }
             return result.available?0:1;
@@ -249,11 +256,27 @@ namespace ZenTimings.Cli
                         $"rated {m.rated_mts}, configured {m.configured_mts} MT/s, configured {m.configured_mv} mV");
                 Console.WriteLine("SPD: "+inventory.spd_status);
                 foreach(var d in inventory.spd)
+                {
                     Console.WriteLine($"  {d.device} ({d.driver}): {d.status}; {d.memory_type} {d.part_number}, "+
                         $"revision {d.revision}, tCK min {d.tck_min_ps} ps, base CRC {d.base_crc_valid}");
+                    PrintDdr4Details(d);
+                }
                 Console.WriteLine(inventory.note);
             }
             return inventory.modules.Length>0 || inventory.spd.Any(d=>d.base_crc_valid==true)?0:1;
+        }
+
+        private static void PrintDdr4Details(LinuxMemoryInventory.Spd spd)
+        {
+            var d=spd.ddr4;
+            if(d==null) return;
+            Console.WriteLine($"    {d.module_manufacturer} / DRAM {d.dram_manufacturer}; {d.capacity_mib} MiB, {d.package_ranks}R, x{d.device_width_bits}");
+            Console.WriteLine($"    JEDEC max {d.jedec_speed_mts} MT/s; {d.xmp_status}");
+            if(d.jedec_timings_at_max_rate_clocks!=null)
+                Console.WriteLine("    JEDEC at max rate: "+string.Join(", ",d.jedec_timings_at_max_rate_clocks.Select(p=>$"{p.Key}={p.Value}")));
+            foreach(var x in d.xmp_profiles)
+                Console.WriteLine($"    XMP {x.profile_number}: {x.speed_mts} MT/s, {x.voltage_mv} mV; "+
+                    string.Join(", ",x.timings_clocks.Select(p=>$"{p.Key}={p.Value}")));
         }
 
         private static string DisplayRunning(string key,uint value) =>

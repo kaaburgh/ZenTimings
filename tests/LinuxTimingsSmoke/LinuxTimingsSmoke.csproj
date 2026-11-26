@@ -20,5 +20,11 @@
     <Compile Include="../../ZenStates-Core/Common/EncodedValueBase.cs" Link="Upstream/Common/EncodedValueBase.cs" />
     <Compile Include="../../ZenStates-Core/Common/EncodedValues.cs" Link="Upstream/Common/EncodedValues.cs" />
     <Compile Include="../../ZenStates-Core/Dictionaries/EncodedValueDictionaries.cs" Link="Upstream/Dictionaries/EncodedValueDictionaries.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR4/Spd/Ddr4SpdDecoder.cs" Link="Upstream/Hardware/DRAM/DDR4/Spd/Ddr4SpdDecoder.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR4/Spd/Ddr4SpdInfo.cs" Link="Upstream/Hardware/DRAM/DDR4/Spd/Ddr4SpdInfo.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR4/Profiles/Ddr4XmpProfile.cs" Link="Upstream/Hardware/DRAM/DDR4/Profiles/Ddr4XmpProfile.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR4/Thermal/Ddr4ThermalData.cs" Link="Upstream/Hardware/DRAM/DDR4/Thermal/Ddr4ThermalData.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/ManufacturerMapping.cs" Link="Upstream/Hardware/DRAM/ManufacturerMapping.cs" />
+    <Compile Include="../../cli/ZenTimings.Cli/SpdCoreOptionsAdapter.cs" Link="SpdCoreOptionsAdapter.cs" />
   </ItemGroup>
 </Project>

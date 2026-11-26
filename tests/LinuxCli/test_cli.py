@@ -318,6 +318,74 @@ class CliTest(unittest.TestCase):
         self.invoke("--apob-file",str(f),"--compare",code=2,live=False)
         self.invoke("--apob",code=2) # no live fixture override
 
+    def test_persisted_apob_image_and_real_ddr4_spd(self):
+        import struct
+        # M33KT24A SPD from the AFU APOB, with serial bytes 325..328 cleared.
+        # Both installed modules have identical SPD after masking.
+        d = bytearray(512)
+        for offset, chunk in (
+            (0, "23110c03452100080060000302030000"),
+            (16, "0000060df8ff01006e6e6e11006ef00a"),
+            (32, "2008000500f02b3428007800143c0000"),
+            (112, "0000000000009cb500000000e7008011"),
+            (128, "0f010200000000000000000000000000"),
+            (240, "0000000000000000000000000000c0e2"),
+            (320, "802c0000000000000034415446353132"),
+            (336, "3634485a2d324736453120200031802c"),
+        ):
+            d[offset:offset+16] = bytes.fromhex(chunk)
+        self.assertEqual(hashlib.sha256(d).hexdigest(),
+                         "e644f5ae5d419ff9f1625248a357375db85acf5079d95f61411d791646112f97")
+        self.assertEqual(len(d),512)
+        self.assertEqual(d[325:329],bytes(4))
+        def entry(group,kind,size):
+            b=bytearray(size)
+            struct.pack_into("<IIII",b,0,group,kind,0,size)
+            return b
+        cfg=entry(1,2,256)
+        struct.pack_into("<HH",cfg,52,1200,2400)
+        for i,value in enumerate([24,0,0,5,0,0,0,15,15,15,15]):
+            cfg[48+0x98+4*i]=value
+        other=entry(1,17,120)
+        spd=entry(1,18,2180)
+        spd[48:50]=bytes((1,2))
+        for ch in range(2):
+            off=52+532*ch
+            spd[off+1]=ch
+            spd[off+4]=1
+            spd[off+20:off+532]=d
+        h=bytearray(0xc0)
+        struct.pack_into("<IIII",h,0,0x424f5041,0x13,len(h)+len(cfg)+len(other)+len(spd),len(h))
+        table=h+cfg+other+spd
+        f=self.root/"spi image.bin"
+        def run(blob,code=0):
+            f.write_bytes(blob)
+            p=self.invoke("--apob-image",str(f),"--json",code=code,live=False)
+            self.assertEqual(f.read_bytes(),blob)
+            return json.loads(p.stdout)["apob"]
+        prefix=b"APOB"+bytes(4092)
+        j=run(prefix+table+bytes(64))
+        self.assertTrue(j["available"])
+        self.assertEqual(j["image_offset"],"0x00001000")
+        self.assertEqual(j["electrical"][0]["settings"]["ProcODT"]["code"],24)
+        self.assertEqual(len(j["spd"]),2)
+        for x in j["spd"]:
+            sp=x["data"]
+            self.assertEqual(sp["part_number"],"4ATF51264HZ-2G6E1")
+            self.assertTrue(sp["base_crc_valid"] and sp["module_crc_valid"])
+            details=sp["ddr4"]
+            self.assertEqual(details["capacity_mib"],4096)
+            self.assertEqual(details["package_ranks"],1)
+            self.assertEqual(details["device_width_bits"],16)
+            self.assertEqual(details["jedec_speed_mts"],2667)
+            self.assertEqual(details["xmp_profiles"],[])
+            self.assertEqual(details["xmp_status"],"not present")
+            self.assertNotIn("serial",json.dumps(details).lower())
+        self.assertFalse(run(prefix+table[:-1],code=1)["available"])
+        self.assertFalse(run(prefix+table+table,code=1)["available"])
+        self.assertFalse(run(prefix,code=1)["available"])
+        self.invoke("--apob-image",str(f),"--apob",code=2,live=False)
+
     def test_arguments_and_non_uefi(self):
         self.invoke("--debug", "--json", code=2)
         self.invoke("--board", "X670E Steel Legend", "--bios", "1.21", code=2)

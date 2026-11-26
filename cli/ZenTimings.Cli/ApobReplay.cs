@@ -112,10 +112,19 @@ namespace ZenTimings.Cli
             var replay=ApobDdr5Config.Unique(entries,7,4,15312);
             if(replay==null) return null;
             var p=Payload(b,replay);
-            if(!Bounds(p,out int n,out int end) || n!=1081 ||
+            if(!Bounds(p,out int n,out int end) || n<4 ||
                 U32(p,32)!=0xDEAD || U32(p,36)!=0x1A ||
-                U32(p,56)!=0xDEAD || U32(p,60)!=0x1B ||
-                U32(p,end-8)!=0x6A3B4 || U32(p,end-4)!=0x437) return null;
+                U32(p,56)!=0xDEAD || U32(p,60)!=0x1B) return null;
+            // 811-record stream observed in tuned two-state v0x18. Its
+            // unknown header/terminal words and PHY companions are not
+            // interpreted; acceptance additionally requires Correlate()
+            // against both UMC blocks and the highest saved GEN state.
+            if(config.unused_trailing_state_slots_per_group==1)
+            {
+                if(n!=811 || config.layout!="ddr5-v0x18-same-layout-candidate") return null;
+                return DecodeWords(p,replay,n,end,Array.Empty<Companion>(),1,config.layout);
+            }
+            if(n!=1081 || U32(p,end-8)!=0x6A3B4 || U32(p,end-4)!=0x437) return null;
             var companions=new List<Companion>();
             for(uint t=30;t<=31;t++)
             {

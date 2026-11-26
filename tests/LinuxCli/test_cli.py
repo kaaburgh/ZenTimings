@@ -1087,6 +1087,64 @@ class CliTest(unittest.TestCase):
         self.invoke("--apob-compare-file",str(ram),code=2,live=False)
         self.invoke("--apob-compare-image",str(afu),"--apob",code=2,live=False)
 
+    def test_drfxi_mcr_policy(self):
+        import struct
+        self.identity("DRFXI", "1.15", "MINISFORUM", "", "")
+        cbs = bytearray(0x6D5)
+        struct.pack_into("<III", cbs, 0, 0xFC4053AA, 0x2D8, 0x4B9D5809)
+        cbs[0x20] = 0x43
+        cbs[0x263] = 255
+        cbs[0x300:0x30e] = b"PRIVATE-MARKER"
+        def read(code=0):
+            self.write("AmdSetupRPL", AMD, cbs)
+            p = self.invoke("--mcr", "--json", code=code)
+            self.assertNotIn("PRIVATE-MARKER", p.stdout)
+            self.assertNotIn("4B9D5809", p.stdout)
+            return json.loads(p.stdout)["mcr_policy"]
+        j = read()
+        self.assertTrue(j["available"])
+        self.assertEqual(j["saved_cbs_mcr"], "Auto")
+        self.assertEqual(j["bios_release"], "1.15")
+        self.assertEqual(j["layout_evidence"], "IFR-derived")
+        self.assertTrue(j["stored_combo_cbs_suppresses_memory_features"])
+        self.assertIn("Saved CBS MCR: Auto", self.invoke("--mcr").stdout)
+        # No AOD variable required. A changed settings fingerprint is not a
+        # schema mismatch and is not reported as an observed APCB match.
+        struct.pack_into("<I", cbs, 8, 0x12345678)
+        cbs[0x20] = 255
+        cbs[0x263] = 1
+        j = read()
+        self.assertEqual(j["saved_cbs_mcr"], "Enabled")
+        self.assertFalse(j["stored_combo_cbs_suppresses_memory_features"])
+        cbs[0x263] = 0
+        self.identity("DRFXI", "1.17", "MINISFORUM", "", "")
+        self.assertEqual(read()["saved_cbs_mcr"], "Disabled")
+        cbs[0x263] = 2
+        self.assertIsNone(read(code=1)["saved_cbs_mcr"])
+        cbs[0x263] = 255
+        cbs[0] ^= 1
+        self.assertFalse(read(code=1)["available"])
+        cbs[0] ^= 1
+        cbs[4] ^= 1
+        self.assertFalse(read(code=1)["available"])
+        cbs[4] ^= 1
+        cbs.append(0)
+        self.assertFalse(read(code=1)["available"])
+        cbs.pop()
+        self.identity("NOTDRFXI", "1.15", "OTHER", "", "")
+        self.assertFalse(read(code=1)["available"])
+        self.identity("DRFXI", "1.16", "MINISFORUM", "", "")
+        self.assertFalse(read(code=1)["available"])
+        self.identity("DRFXI", "1.15", "MINISFORUM", "", "")
+        path = self.efi / ("AmdSetupRPL-" + AMD)
+        path.write_bytes(b"\x07\x00")
+        self.assertFalse(json.loads(self.invoke("--mcr", "--json", code=1).stdout)["mcr_policy"]["available"])
+        path.unlink()
+        self.assertFalse(json.loads(self.invoke("--mcr", "--json", code=1).stdout)["mcr_policy"]["available"])
+        self.invoke("--mcr", "--debug", code=2)
+        self.invoke("--mcr", "--apob", code=2)
+        self.invoke("--mcr", "--compare", code=2)
+
     def test_arguments_and_non_uefi(self):
         self.invoke("--debug", "--json", code=2)
         self.invoke("--board", "X670E Steel Legend", "--bios", "1.21", code=2)

@@ -27,6 +27,7 @@ namespace ZenTimings.Cli
               zentimings --compare [--extended] [--pm-table] [--modules] [--apob] [--json]
               zentimings --pm-table [--json]
               zentimings --modules [--json]
+              zentimings --mcr [--json]
               zentimings --apob [--json]
               zentimings --apob-file FILE [--json]
               zentimings --apob-image FILE [--json]
@@ -44,6 +45,7 @@ namespace ZenTimings.Cli
             --apob-image: find a unique validated persisted APOB in an existing SPI image file.
             --apob-compare-image: DRFXI only; equality-only JSON, compare local AFU with reserved RAM.
             --apob-compare-file: use an existing local APOB table instead of reading RAM (offline comparison).
+            --mcr: saved DRFXI 1.15/1.17 CBS Memory Context Restore policy only; no runtime restore claim.
             --modules: SMBIOS DIMM inventory and already-bound SPD EEPROMs (no I2C probing).
             --extended: additional UMC fields, BGS, refresh mode and DDR5 Nitro.
             --pm-table: experimental Picasso SMU telemetry; no configured clock substitution.
@@ -55,6 +57,7 @@ namespace ZenTimings.Cli
             try
             {
                 bool json = false, debug = false, origins = false, timings = false, compare = false, pmTable = false, extended = false, modules = false, apob = false;
+                bool mcr = false;
                 string apobCompareImage = null, apobCompareFile = null;
                 string apobImage = null, apobFile = null, replay = null, board = null, bios = null, root = "/sys";
                 var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -75,6 +78,7 @@ namespace ZenTimings.Cli
                         case "--pm-table": pmTable = true; break;
                         case "--extended": extended = true; break;
                         case "--modules": modules = true; break;
+                        case "--mcr": mcr = true; break;
                         case "--apob": apob = true; break;
                         case "--apob-file": apobFile = Next(); break;
                         case "--apob-image": apobImage = Next(); break;
@@ -86,6 +90,29 @@ namespace ZenTimings.Cli
                         case "--sysfs-root": root = Next(); break; // fixture/test override
                         default: throw new ArgumentException("Unknown option: " + arg);
                     }
+                }
+                if (mcr)
+                {
+                    if (seen.Any(x => x != "--mcr" && x != "--json" && x != "--sysfs-root"))
+                        throw new ArgumentException("--mcr is a standalone read-only mode.");
+                    if (!OperatingSystem.IsLinux())
+                        throw new PlatformNotSupportedException("--mcr live access requires Linux.");
+                    var policy = LinuxMcrPolicy.Capture(new LinuxFirmware(root));
+                    if (json)
+                        Console.WriteLine(JsonSerializer.Serialize(new { schema_version = 1, mcr_policy = policy },
+                            new JsonSerializerOptions { WriteIndented = true }));
+                    else
+                    {
+                        Console.WriteLine("MCR policy: " + policy.status);
+                        if (policy.available)
+                        {
+                            Console.WriteLine("  Saved CBS MCR: " + policy.saved_cbs_mcr);
+                            Console.WriteLine("  Stored Combo CBS satisfies DDR Memory Features suppress condition: " +
+                                policy.stored_combo_cbs_suppresses_memory_features);
+                        }
+                        Console.WriteLine("  " + policy.note);
+                    }
+                    return policy.available ? 0 : 1;
                 }
                 if(apobCompareImage!=null || apobCompareFile!=null)
                 {

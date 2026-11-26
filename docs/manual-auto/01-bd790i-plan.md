@@ -7,9 +7,11 @@ Scope: one board family, two BIOS releases with identical setup layouts. No layo
 All conditions must hold, otherwise the column shows `?` and the feature stays silent:
 
 1. SMBIOS: board/BIOS strings identify DRFXI (ZenTimings already shows `DRFXI | BIOS 1.15`), BIOS version in {1.15, 1.17}.
-2. `AmdSetupRPL` (GUID `3a997502-647a-4c82-998e-52ef9486a247`) reads back with **size 0x6D5**, header signature `0xFC4053AA` at +0x00, length field `0x2D8` at +0x04 and CBS generation `0x4B9D5809` at +0x08 (the generation is a fingerprint of the CBS code defaults; identical in 1.15 and 1.17). **CONFIRMED** (image + owner readback).
+2. `AmdSetupRPL` (GUID `3a997502-647a-4c82-998e-52ef9486a247`) reads back with **size 0x6D5**, header signature `0xFC4053AA` at +0x00, length field `0x2D8` at +0x04. **CONFIRMED** (image + owner readback). The +0x08 word is mutable CBS settings state, not a layout signature; see correction below.
 3. `AodSetupRpl` (GUID `5ed15dc0-edef-4161-9151-6014c4cc630c`) reads back with **size 0x1AC**. **CONFIRMED**.
 4. Plausibility check passes (section 4).
+
+**2026-11-26 correction:** static verification of original DRFXI 1.15 and 1.17 CbsSetupDxeRPL PE32 images shows that the synchronization routine (RVA 0x3c97) computes a settings hash (0x5134), compares the existing CBS +8 word with APCB token 0xB331378E (0x3ca5), and on mismatch stores the computed hash at +8 (0x3cb2) before APCB transfer. Caller paths include a subsequent SetVariable of the CBS payload (e.g. 0xe21 → 0xe50). This does not imply every settings change immediately updates the hash. The two PE32 bodies differ by only five bytes, all PCD operands, outside these hash/transfer instructions. Keep exact release, sizes, stable header fields and semantic plausibility checks; do not reject an otherwise valid DRFXI layout solely because its +8 word changed. No such relaxation is made for other board families. [Research checkpoint](https://github.com/kaaburgh/DRFXI-bios-analysis/blob/main/docs/checkpoints/2026-11-26-mcr-retrain-apob-lifecycle.md).
 
 Both variables carry the AMI runtime attribute in NVRAM (attr `0x83`), so they should be readable from Windows. **TO VERIFY** on hardware (`drfxi-mem.ps1` performs exactly this read).
 

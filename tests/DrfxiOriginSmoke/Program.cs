@@ -552,11 +552,32 @@ internal static class Program
             StringComparer.OrdinalIgnoreCase) { { "AmdSetupRPL", cbs }, { "AodSetupRpl", aod } };
         Check(catalog115.CheckFingerprint(fingerprintBlobs) == null,
             "correct variable sizes and CBS header pass catalog fingerprint");
-        byte[] brokenAmd = (byte[])cbs.Clone();
-        brokenAmd[8] ^= 0x01;
-        fingerprintBlobs["AmdSetupRPL"] = brokenAmd;
-        Check(catalog115.CheckFingerprint(fingerprintBlobs)?.Contains("0x8") == true,
-            "changed generation rejects catalog fingerprint");
+        byte[] changedAmd = (byte[])cbs.Clone();
+        changedAmd[8] ^= 0x01;
+        fingerprintBlobs["AmdSetupRPL"] = changedAmd;
+        Check(catalog115.CheckFingerprint(fingerprintBlobs) == null
+            && catalog117.CheckFingerprint(fingerprintBlobs) == null,
+            "mutable CBS settings fingerprint is not DRFXI layout identity");
+        Check(DrfxiSettingOrigins.FromBlobs(changedAmd, aod).IsMatched,
+            "DRFXI resolver accepts changed settings fingerprint");
+        foreach (string version in new[] { "1.15", "1.17" })
+        {
+            var changed = DrfxiSettingOrigins.ReadFromProvider("DRFXI", version,
+                (name, guid) => name == "AmdSetupRPL" ? changedAmd : aod);
+            Check(changed.IsMatched, "provider accepts mutable fingerprint on " + version);
+        }
+        foreach (int offset in new[] { 0, 4 })
+        {
+            changedAmd[offset] ^= 1;
+            Check(catalog115.CheckFingerprint(fingerprintBlobs)?.Contains("0x" + offset.ToString("X")) == true,
+                "stable CBS header mismatch rejects catalog fingerprint");
+            Check(!DrfxiSettingOrigins.FromBlobs(changedAmd, aod).IsMatched,
+                "stable CBS header mismatch rejects resolver");
+            changedAmd[offset] ^= 1;
+        }
+        changedAmd[0x116] = 254;
+        Check(!DrfxiSettingOrigins.FromBlobs(changedAmd, aod).IsMatched,
+            "mutable fingerprint does not bypass CBS plausibility gate");
         fingerprintBlobs["AmdSetupRPL"] = new byte[20];
         Check(catalog115.CheckFingerprint(fingerprintBlobs)?.Contains("size") == true,
             "incorrect varstore size rejects catalog fingerprint");
@@ -750,8 +771,14 @@ internal static class Program
             "offline report cannot bypass board catalog gate");
         Check(!DrfxiSettingOrigins.FromDebugReport("DRFXI", "1.19", text).IsMatched,
             "offline report cannot bypass firmware version gate");
+        byte[] changedHeader = (byte[])savedCbs.Clone();
+        changedHeader[8] ^= 1;
+        string changedReport = "AmdSetupRPL.base64: " + Convert.ToBase64String(changedHeader) + "\n"
+            + "AodSetupRpl.base64: " + Convert.ToBase64String(savedAod) + "\n";
+        Check(DrfxiSettingOrigins.FromDebugReport("DRFXI", "1.15", changedReport).IsMatched,
+            "offline replay accepts changed CBS settings fingerprint");
         byte[] invalidHeader = (byte[])savedCbs.Clone();
-        invalidHeader[8] ^= 1;
+        invalidHeader[0] ^= 1;
         string invalidReport = "AmdSetupRPL.base64: " + Convert.ToBase64String(invalidHeader) + "\n"
             + "AodSetupRpl.base64: " + Convert.ToBase64String(savedAod) + "\n";
         var wrongFingerprint = DrfxiSettingOrigins.FromDebugReport("DRFXI", "1.15", invalidReport);

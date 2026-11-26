@@ -49,8 +49,8 @@ namespace ZenTimings.Cli
 
             // +8 is the stored CBS settings fingerprint according to the
             // CbsSetupDxeRPL -> APCB sync investigation, not an invariant
-            // schema field. Do not compare or export it. This intentionally
-            // does not relax the existing full setting-origin resolver.
+            // schema field. Do not compare or export it. The full timing-origin
+            // resolver uses the same stable header, plus AOD and IFR checks.
             string mcr = b[0x263] switch
             {
                 0 => "Disabled",

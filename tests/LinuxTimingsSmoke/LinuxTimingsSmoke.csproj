@@ -13,6 +13,7 @@
     <Compile Include="../../cli/ZenTimings.Cli/LinuxMemoryInventory.cs" Link="LinuxMemoryInventory.cs" />
     <Compile Include="../../cli/ZenTimings.Cli/LinuxApob.cs" Link="LinuxApob.cs" />
     <Compile Include="../../cli/ZenTimings.Cli/ApobReplay.cs" Link="ApobReplay.cs" />
+    <Compile Include="../../cli/ZenTimings.Cli/ApobDdr5Config.cs" Link="ApobDdr5Config.cs" />
     <Compile Include="../../cli/ZenTimings.Cli/ApobUtilsAdapter.cs" Link="ApobUtilsAdapter.cs" />
     <Compile Include="../../ZenStates-Core/Hardware/Apob/ApobEntry.cs" Link="Upstream/Hardware/Apob/ApobEntry.cs" />
     <Compile Include="../../ZenStates-Core/Hardware/Apob/ApobCoreMap.cs" Link="Upstream/Hardware/Apob/ApobCoreMap.cs" />

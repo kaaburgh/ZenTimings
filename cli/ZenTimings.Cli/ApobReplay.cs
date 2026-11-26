@@ -17,7 +17,12 @@ namespace ZenTimings.Cli
             SortedDictionary<string,uint> candidate_timings,
             SortedDictionary<string,uint> candidate_extended_fields,
             SortedDictionary<string,SortedDictionary<string,uint>> refresh_word_candidates);
-        internal sealed record Companion(uint type,int count,int end_exclusive,uint initial_marker_id);
+        internal sealed record CompanionStructure(int body_start_offset,int body_end_exclusive,int adjacent_u16_pairs,
+            int equal_adjacent_u16_pairs,int motif_05b0_count,int motif_05b1_count,uint[] observed_marker_ids,string note);
+        internal sealed record Companion(uint type,int count,int end_exclusive,uint initial_marker_id)
+        {
+            public CompanionStructure legacy_structure { get; init; }
+        }
         internal sealed record Result(string status,uint entry_offset,int record_count,int start_offset,
             int end_exclusive,int opaque_trailing_bytes,SortedDictionary<string,int> marker_counts,
             Companion[] companions,Channel[] channels,string note)
@@ -36,6 +41,34 @@ namespace ZenTimings.Cli
             count=(int)n;end=32+count*8;
             return true;
         }
+        private static CompanionStructure LegacyStructure(ReadOnlySpan<byte> q,int end)
+        {
+            // Already bounded and bracketed by the known markers. The interior
+            // is NOT interpreted as address/data or PHY commands.
+            const int start=40;
+            int stop=end-16;
+            int pairs=(stop-start)/4, equal=0, a=0, b=0;
+            ushort[] motif={0xFFF,0xFFF,0x5B0,0x5B0,0xFFF,0xFFF,0,0,0x18,0x18,0x2F7,0x2F7};
+            for(int i=start;i<stop;i+=4)
+                if(BinaryPrimitives.ReadUInt16LittleEndian(q.Slice(i,2))==
+                    BinaryPrimitives.ReadUInt16LittleEndian(q.Slice(i+2,2))) equal++;
+            for(int i=start;i+24<=stop;i+=2)
+            {
+                ushort v=BinaryPrimitives.ReadUInt16LittleEndian(q.Slice(i+4,2));
+                if(v!=0x5B0 && v!=0x5B1) continue;
+                motif[2]=motif[3]=v;
+                bool match=true;
+                for(int j=0;j<motif.Length;j++)
+                    if(BinaryPrimitives.ReadUInt16LittleEndian(q.Slice(i+2*j,2))!=motif[j]) { match=false;break; }
+                if(match) { if(v==0x5B0) a++; else b++; }
+            }
+            var markers=new List<uint>();
+            for(int i=32;i<end;i+=8)
+                if(U32(q,i)==0xFFFFDEAD) markers.Add(U32(q,i+4));
+            return new CompanionStructure(start,stop,pairs,equal,a,b,markers.ToArray(),
+                "Structural observations only. Equal adjacent u16 pairs include zeros and internal markers; no lane, rank, phase, training result or opcode interpretation.");
+        }
+
         internal static Result Decode(byte[] b,List<ApobEntry> entries,uint version,int header,bool validatedLegacySpd)
         {
             if(!validatedLegacySpd || version!=0x13 || header!=0xC0) return null;
@@ -68,7 +101,7 @@ namespace ZenTimings.Cli
                    U32(q,stop-16)!=0xFFFFDEAD || U32(q,stop-12)!=0x20 ||
                    U32(q,stop-8)!=0xFFFFDEAD || U32(q,stop-4)!=0x17) return null;
                 for(int i=stop;i<q.Length;i++) if(q[i]!=0) return null;
-                companions.Add(new Companion(t,count,stop,U32(q,36)));
+                companions.Add(new Companion(t,count,stop,U32(q,36)) { legacy_structure=LegacyStructure(q,stop) });
             }
             return DecodeWords(p,replay,n,end,companions.ToArray(),0,"picasso-v0x13");
         }

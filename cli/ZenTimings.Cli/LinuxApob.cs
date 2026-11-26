@@ -132,9 +132,26 @@ namespace ZenTimings.Cli
                 }
             }
             var ddr5Config=ApobDdr5Config.Decode(b,raw,h.version,h.header,spd);
+            bool variant=ddr5Config==null;
+            if(variant) ddr5Config=ApobDdr5Config.Decode(b,raw,h.version,h.header,spd,variant:true);
+            var ddr5Replay=ApobReplay.DecodeDdr5(b,raw,ddr5Config);
+            var correlation=ApobDdr5Config.Correlate(ddr5Config,ddr5Replay);
+            // A non-donor layout is provisional until the saved GEN state and
+            // both independently decoded replay address blocks agree.
+            if(variant && correlation==null) { ddr5Config=null; ddr5Replay=null; }
+            if(ddr5Config!=null)
+            {
+                ddr5Config=ddr5Config with { replay_correlation=correlation };
+                // MEM 2 remains undecoded; distinguish that from unsupported
+                // DDR4 once a separate DDR5 layout has been established.
+                for(int i=0;i<diagnostics.Count;i++)
+                    if(diagnostics[i].StartsWith("MEM 2 ",StringComparison.Ordinal) &&
+                       diagnostics[i].EndsWith(": unsupported DDR4 config size",StringComparison.Ordinal))
+                        diagnostics[i]=diagnostics[i].Replace("unsupported DDR4 config size","DDR5 layout established separately; MEM 2 not decoded");
+            }
             return new Result(true,"structurally parsed, experimental",source,address,h.version,(uint)h.size,(uint)h.header,
                 entries,electrical.ToArray(),spd.ToArray(),diagnostics.ToArray(),Note) {
-                    replay=ApobReplay.Decode(b,raw,h.version,h.header,validatedLegacySpd) ?? ApobReplay.DecodeDdr5(b,raw,ddr5Config),
+                    replay=ApobReplay.Decode(b,raw,h.version,h.header,validatedLegacySpd) ?? ddr5Replay,
                     ddr5_config=ddr5Config,
                     gen_config=ApobLegacyConfig.Decode(b,raw,h.version,h.header,validatedLegacySpd,electrical,spd)
                 };

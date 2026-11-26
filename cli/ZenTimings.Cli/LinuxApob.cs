@@ -24,6 +24,7 @@ namespace ZenTimings.Cli
             SpdSlot[] spd,string[] diagnostics,string note)
         {
             public string image_offset { get; init; }
+            public ApobBiosDirectory.Result bios_directory { get; init; }
             public ApobReplay.Result replay { get; init; }
             public ApobLegacyConfig.Result gen_config { get; init; }
             public ApobDdr5Config.Result ddr5_config { get; init; }
@@ -198,15 +199,16 @@ namespace ZenTimings.Cli
                             c.settings["ProcODT"].code>0) || parsed.spd.Any(x=>x.data.base_crc_valid==true))) continue;
                         matches.Add(parsed with { image_offset=$"0x{offset:X8}" });
                         if(matches.Count>1)
-                            return Failure(source,new[]{"Multiple validated APOB tables; extract the intended complete table and use --apob-file."});
+                            return Failure(source,new[]{"Multiple validated APOB tables; extract the intended complete table and use --apob-file."}) with { bios_directory=ApobBiosDirectory.Inspect(image) };
                     }
                     catch(Exception ex) when(ex is InvalidDataException || ex is ArgumentException || ex is OverflowException)
                     { /* Reject malformed signature candidates, continue bounded search. */ }
                 }
                 if(matches.Count==0)
-                    return Failure(source,new[]{$"No complete supported APOB table with decoded memory evidence; {signatures} signature candidates examined."});
+                    return Failure(source,new[]{$"No complete supported APOB table with decoded memory evidence; {signatures} signature candidates examined."}) with { bios_directory=ApobBiosDirectory.Inspect(image) };
                 var result=matches[0];
-                return result with { diagnostics=result.diagnostics.Append($"Unique validated table; {signatures} signature candidates examined.").ToArray() };
+                return result with { diagnostics=result.diagnostics.Append($"Unique validated table; {signatures} signature candidates examined.").ToArray(),
+                    bios_directory=ApobBiosDirectory.Inspect(image,int.Parse(result.image_offset.Substring(2),NumberStyles.HexNumber,CultureInfo.InvariantCulture),result.table_size) };
             }
             catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException || ex is NotSupportedException)
             { return Failure(source,new[]{ex.GetType().Name+": "+ex.Message}); }

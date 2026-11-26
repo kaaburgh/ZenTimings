@@ -708,14 +708,14 @@ class CliTest(unittest.TestCase):
         for g in range(2):
             o=48+0x630+g*0x7a0
             for off,v in ((0,3000),(4,1500),(0x0c,36),(0x10,40),(0x14,40),
-                          (0x18,40),(0x1c,76),(0x6c,11677),
+                          (0x18,40),(0x1c,76),(0x24,34),(0x6c,11677),
                           (0x84,885),(0x8c,885),(0x98,885),
                           (0x90,480),(0x9c,480),(0xa8,390),(0xb0,390),
                           (0x88,480),(0x94,400),(0xac,300)):
                 struct.pack_into("<I",tuned,o+off,v)
         tuned_rep=bytearray(rep)
         values={0x50200:0x80050bb8,0x50204:0x28284c24,0x50208:0x00280074,
-                0x50230:0x00302d9d,0x50260:0x019001e0,0x502c0:0x0048012c}
+                0x50214:0x00180622,0x50230:0x00302d9d,0x50260:0x019001e0,0x502c0:0x0048012c}
         for o in range(48+32,48+0x21e8,8):
             addr=struct.unpack_from("<I",tuned_rep,o)[0]&~0x100000
             if addr in values:

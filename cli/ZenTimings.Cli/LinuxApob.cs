@@ -318,9 +318,9 @@ namespace ZenTimings.Cli
         {
             if(!OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("Live comparison requires Linux.");
             var cpu=RunningTimings.Identify();
-            var firmware=new LinuxFirmware("/sys");
+            string board=File.ReadAllText("/sys/class/dmi/id/board_name").Trim();
             if(RunningTimings.MemoryType(cpu)!=1 ||
-               firmware.Board==null || firmware.Board.IndexOf("DRFXI",StringComparison.OrdinalIgnoreCase)<0)
+               board.IndexOf("DRFXI",StringComparison.OrdinalIgnoreCase)<0)
                 throw new InvalidDataException("Live comparison requires recognized DRFXI and supported DDR5 CPU.");
             const long address=DrfxiApobComparison.RamAddress;
             var map=ParseMap(File.ReadLines("/proc/iomem"));

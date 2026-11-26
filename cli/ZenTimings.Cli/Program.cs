@@ -286,7 +286,7 @@ namespace ZenTimings.Cli
                 {
                     var boot=result.ddr5_boot_info;
                     Console.WriteLine($"  DDR5 APCB boot info: both SPD identities match (not printed); active instance 0x{boot.apcb_active_instance_code:X}, DIMM configuration updated: {boot.dimm_configuration_updated_candidate}");
-                    Console.WriteLine($"    Last PMU train time raw {boot.last_pmu_train_time_raw} (unit unknown); recovery/action/profile codes {boot.apcb_recovery_flag_code}/{boot.action_on_bist_failure_code}/{boot.workload_profile_code}");
+                    Console.WriteLine($"    Last training date candidate {boot.last_training_date_candidate??"unavailable"} ({boot.last_training_date_encoding}); recovery/action/profile codes {boot.apcb_recovery_flag_code}/{boot.action_on_bist_failure_code}/{boot.workload_profile_code}");
                     Console.WriteLine("    "+boot.note);
                 }
                 if(result.ddr5_training_structure!=null)

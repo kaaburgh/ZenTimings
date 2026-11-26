@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using ZenTimings.Common;
 using System.Linq;
 using System.Reflection;
 using System.Windows;
@@ -41,6 +43,8 @@ namespace ZenTimings.Windows
             InitializeComponent();
             _apob = apob;
             Fill();
+            CompareAfuButton.IsEnabled = _apob != null && _apob.Address == DrfxiApobComparison.RamAddress &&
+                _apob.RawTable != null && _apob.RawTable.Length >= 16;
         }
 
         private void Fill()
@@ -676,6 +680,54 @@ namespace ZenTimings.Windows
             }
 
             ClipboardUtils.Copy($"{section.Header}{Environment.NewLine}{text}", button);
+        }
+
+        private void CompareAfu_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Reuse the already acquired live snapshot. No driver calls,
+                // firmware writes, refresh or raw data export on this path.
+                if (_apob == null || _apob.Address != DrfxiApobComparison.RamAddress || _apob.RawTable == null)
+                    throw new InvalidDataException("No cached DRFXI APOB snapshot.");
+                var input = new Microsoft.Win32.OpenFileDialog
+                {
+                    Title = "Select local DRFXI AFU dump",
+                    Filter = "BIOS image (*.bin;*.rom)|*.bin;*.rom|All files (*.*)|*.*",
+                    CheckFileExists = true,
+                    Multiselect = false
+                };
+                if (input.ShowDialog(this) != true) return;
+                var report = DrfxiApobComparison.Compare(DrfxiApobComparison.ReadPersisted(input.FileName),
+                    (byte[])_apob.RawTable.Clone(), "Windows cached APOB");
+                var save = new Microsoft.Win32.SaveFileDialog
+                {
+                    Title = "Save equality-only JSON report (not firmware)",
+                    Filter = "JSON report (*.json)|*.json",
+                    FileName = "bd790i-ram-spi-comparison.json",
+                    AddExtension = true,
+                    OverwritePrompt = true
+                };
+                if (save.ShowDialog(this) != true) return;
+                using (var stream = new FileStream(save.FileName, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false)))
+                    writer.WriteLine(report.ToJson());
+                ZenTimings.Theming.MessageBox.Show(this,
+                    "APOB table equal: " + report.table_equal + "\nEntry layout equal: " + report.entry_layout_equal +
+                    "\nOnly an equality/count report was saved. Keep the AFU private.\n" +
+                    "This compares the cached snapshot, not a new physical-memory read.",
+                    "DRFXI APOB comparison");
+            }
+            catch (InvalidDataException ex)
+            {
+                ZenTimings.Theming.MessageBox.Show(this, ex.Message, "APOB comparison unavailable");
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                ZenTimings.Theming.MessageBox.Show(this,
+                    "Unable to read the selected input or create a new output file. Existing files are not overwritten.",
+                    "APOB comparison unavailable");
+            }
         }
 
         private void Window_Activated(object sender, EventArgs e)

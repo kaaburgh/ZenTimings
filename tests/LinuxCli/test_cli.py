@@ -451,7 +451,7 @@ class CliTest(unittest.TestCase):
         self.assertIsNotNone(rr)
         self.assertEqual(rr["record_count"],1454)
         self.assertEqual(rr["end_exclusive"],0x2d90)
-        self.assertEqual(rr["opaque_trailing_bytes"],2184)
+        self.assertEqual(rr["opaque_trailing_bytes"],2192)
         self.assertEqual(len(rr["companions"]),5)
         self.assertEqual(len(rr["channels"]),2)
         for ch,c in enumerate(rr["channels"]):

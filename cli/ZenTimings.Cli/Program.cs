@@ -235,7 +235,7 @@ namespace ZenTimings.Cli
                 foreach(var slot in result.spd)
                 {
                     Console.WriteLine($"  SPD copy: socket {slot.socket}, channel {slot.channel}, DIMM {slot.dimm}: {slot.data.status}; {slot.data.part_number}");
-                    PrintDdr4Details(slot.data);
+                    PrintSpdDetails(slot.data);
                 }
                 Console.WriteLine(result.note);
             }
@@ -259,17 +259,28 @@ namespace ZenTimings.Cli
                 {
                     Console.WriteLine($"  {d.device} ({d.driver}): {d.status}; {d.memory_type} {d.part_number}, "+
                         $"revision {d.revision}, tCK min {d.tck_min_ps} ps, base CRC {d.base_crc_valid}");
-                    PrintDdr4Details(d);
+                    PrintSpdDetails(d);
                 }
                 Console.WriteLine(inventory.note);
             }
             return inventory.modules.Length>0 || inventory.spd.Any(d=>d.base_crc_valid==true)?0:1;
         }
 
-        private static void PrintDdr4Details(LinuxMemoryInventory.Spd spd)
+        private static void PrintSpdDetails(LinuxMemoryInventory.Spd spd)
         {
             var d=spd.ddr4;
-            if(d==null) return;
+            if(d==null)
+            {
+                var d5=spd.ddr5;
+                if(d5==null) return;
+                Console.WriteLine($"    {d5.module_manufacturer} / DRAM {d5.dram_manufacturer}; {d5.capacity_mib} MiB, {d5.ranks_per_channel}R/channel, x{d5.device_width_bits}");
+                Console.WriteLine($"    JEDEC max {d5.jedec_speed_mts} MT/s; XMP: {d5.xmp_status}; EXPO: {d5.expo_status}");
+                Console.WriteLine("    JEDEC at max rate: "+string.Join(", ",d5.jedec_timings_at_max_rate_clocks.Select(p=>$"{p.Key}={p.Value}")));
+                foreach(var p in d5.profiles)
+                    Console.WriteLine($"    {p.kind} {p.profile_number}: {p.speed_mts} MT/s, VDD {p.vdd_mv} mV, VDDQ {p.vddq_mv} mV; "+
+                        string.Join(", ",p.timings_clocks.Select(x=>$"{x.Key}={x.Value}")));
+                return;
+            }
             Console.WriteLine($"    {d.module_manufacturer} / DRAM {d.dram_manufacturer}; {d.capacity_mib} MiB, {d.package_ranks}R, x{d.device_width_bits}");
             Console.WriteLine($"    JEDEC max {d.jedec_speed_mts} MT/s; {d.xmp_status}");
             if(d.jedec_timings_at_max_rate_clocks!=null)

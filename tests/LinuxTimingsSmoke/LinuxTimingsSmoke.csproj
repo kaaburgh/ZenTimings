@@ -19,6 +19,7 @@
     <Compile Include="../../cli/ZenTimings.Cli/ApobBootInfo.cs" Link="ApobBootInfo.cs" />
     <Compile Include="../../cli/ZenTimings.Cli/ApobUtilsAdapter.cs" Link="ApobUtilsAdapter.cs" />
     <Compile Include="../../ZenStates-Core/Hardware/Apob/ApobEntry.cs" Link="Upstream/Hardware/Apob/ApobEntry.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/Apob/ApobBootInfo.cs" Link="Upstream/Hardware/Apob/ApobBootInfo.cs" />
     <Compile Include="../../ZenStates-Core/Hardware/Apob/ApobCoreMap.cs" Link="Upstream/Hardware/Apob/ApobCoreMap.cs" />
     <Compile Include="../../ZenStates-Core/Hardware/Apob/ApobMemGeneralConfig.cs" Link="Upstream/Hardware/Apob/ApobMemGeneralConfig.cs" />
     <Compile Include="../../ZenStates-Core/Hardware/Apob/ApobDimmSpd.cs" Link="Upstream/Hardware/Apob/ApobDimmSpd.cs" />

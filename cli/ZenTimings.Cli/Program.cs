@@ -259,6 +259,12 @@ namespace ZenTimings.Cli
                             Console.WriteLine($"    MR0..6: {string.Join(" ",s.mode_registers.words)}; VrefDQ {s.mode_registers.initial_vref_dq_percent_vddq}% VDDQ (saved)");
                         }
                     }
+                    if(result.gen_config.metadata_observations!=null)
+                    {
+                        foreach(var m in result.gen_config.metadata_observations.observations)
+                            Console.WriteLine($"    Metadata record at 0x{m.payload_offset:X}: index {m.index_word}, words +20/+22/+24 = {m.word_20}/{m.word_22}/{m.word_24}; equal groups {string.Join(", ",m.equal_group_indices)}");
+                        Console.WriteLine("    "+result.gen_config.metadata_observations.note);
+                    }
                     Console.WriteLine("    "+result.gen_config.note);
                 }
                 if(result.ddr5_config!=null)
@@ -284,6 +290,11 @@ namespace ZenTimings.Cli
                         Console.WriteLine("    Candidate timings: "+string.Join(", ",c.candidate_timings.Select(p=>$"{p.Key}={p.Value}")));
                         foreach(var r in c.refresh_word_candidates)
                             Console.WriteLine("    Refresh word "+r.Key+": "+string.Join(", ",r.Value.Select(p=>$"{p.Key}={p.Value}")));
+                    }
+                    foreach(var companion in replay.companions)
+                    {
+                        var st=companion.legacy_structure;
+                        if(st!=null) Console.WriteLine($"    MEM {companion.type}: {st.equal_adjacent_u16_pairs}/{st.adjacent_u16_pairs} equal adjacent u16 pairs, motif 05B0/05B1 {st.motif_05b0_count}/{st.motif_05b1_count} (structural only)");
                     }
                     Console.WriteLine("    "+replay.note);
                 }

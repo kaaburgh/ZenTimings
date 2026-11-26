@@ -580,14 +580,14 @@ class CliTest(unittest.TestCase):
                     struct.pack_into("<I",gen,o+off,refresh[1])
                 for off in (0xa8,0xb0):
                     struct.pack_into("<I",gen,o+off,refresh[2])
-                e=48+base+0x58f+i*0x1a
+                e=48+base+0x58f+i*0x19
                 ext=bytes.fromhex((
-                    "00000000060605000000010705070c1c0c1e1e1e5d5834340100",
-                    "000000040404010000010505070c1e0c1e1e1e633f2727000000",
-                    "0000040404010000010505070c1e0c1e1e1e633f272700000000",
+                    "00000000060605000000010705070c1c0c1e1e1e5d58343401",
+                    "00000000040404010000010505070c1e0c1e1e1e633f272700",
+                    "00000000040404010000010505070c1e0c1e1e1e633f272700",
                 )[i])
-                self.assertEqual(len(ext),26)
-                gen[e:e+26]=ext
+                self.assertEqual(len(ext),25)
+                gen[e:e+25]=ext
         self.assertEqual(len(gen),6020)
         rep=entry(7,4,15312)
         def pair(buf,offset,a,v):
@@ -644,6 +644,7 @@ class CliTest(unittest.TestCase):
             self.assertEqual(g["states"][0]["refresh_candidates_clocks"],{"tRFC":708,"tRFC2":384,"tRFCsb":312})
             self.assertEqual(g["states"][0]["refresh_slot_words"]["0x88"],0)
             self.assertEqual(g["states"][0]["electrical_candidates"]["ProcOdt"]["code"],12)
+            self.assertEqual([s["electrical_candidates"]["RttPark"]["code"] for s in g["states"]],[6,4,4])
         rr=j["replay"]
         self.assertIsNotNone(rr)
         self.assertEqual(rr["layout"],"ddr5-donor-v0x18")

@@ -24,6 +24,7 @@ namespace ZenTimings.Cli
             SpdSlot[] spd,string[] diagnostics,string note)
         {
             public string image_offset { get; init; }
+            public ApobReplay.Result replay { get; init; }
         }
         private const string Note="APOB is firmware boot/training data, not a live sensor. Layouts inherited from pinned ZenStates-Core; HMAC not verified. No raw bytes or serial numbers exported. No automatic UMC association.";
         private static uint U32(byte[] b,int o)=>BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(o,4));
@@ -67,8 +68,9 @@ namespace ZenTimings.Cli
                 raw.Count(x=>x.RawGroupId==1 && x.RawDataTypeId==17 && x.InstanceId==e.InstanceId && x.Size==120)==1 &&
                 raw.Count(x=>x.RawGroupId==1 && x.RawDataTypeId==2 && x.InstanceId==e.InstanceId && x.Size==256)==1;
             var entries=raw.Select(e=>new Entry(e.Offset,e.GroupId,e.DataTypeId,e.InstanceId,e.Size,e.IsEncrypted,
-                IsLegacySpd(e)?"DIMM SPD data (legacy v0x13 candidate)":e.Name)).ToArray();
-            var electrical=new List<Electrical>(); var spd=new List<SpdSlot>(); var diagnostics=new List<string>();
+                IsLegacySpd(e)?"DIMM SPD data (legacy v0x13 candidate)":
+                legacyDdr4 && e.RawGroupId==1 && e.RawDataTypeId==17 && e.Size==120?"Legacy non-SPD record (unknown)":e.Name)).ToArray();
+            var electrical=new List<Electrical>(); var spd=new List<SpdSlot>(); var diagnostics=new List<string>(); bool validatedLegacySpd=false;
             foreach(var e in raw.Where(e=>e.GroupId==1 && (e.DataTypeId==2 || e.DataTypeId==17 || IsLegacySpd(e))))
             {
                 string label=$"MEM {e.DataTypeId} instance {e.InstanceId} at 0x{e.Offset:X}";
@@ -112,6 +114,7 @@ namespace ZenTimings.Cli
                         if(!valid) { diagnostics.Add(label+": legacy SPD topology/CRC mismatch"); continue; }
                         if(spd.Count>0) { diagnostics.Add(label+": another SPD source already decoded; legacy candidate skipped"); continue; }
                         diagnostics.Add(label+": legacy Picasso v0x13 DDR4 SPD array");
+                        validatedLegacySpd=e.InstanceId==0;
                     }
                     foreach(var slot in slots)
                     {
@@ -126,7 +129,9 @@ namespace ZenTimings.Cli
                 }
             }
             return new Result(true,"structurally parsed, experimental",source,address,h.version,(uint)h.size,(uint)h.header,
-                entries,electrical.ToArray(),spd.ToArray(),diagnostics.ToArray(),Note);
+                entries,electrical.ToArray(),spd.ToArray(),diagnostics.ToArray(),Note) {
+                    replay=ApobReplay.Decode(b,raw,h.version,h.header,validatedLegacySpd)
+                };
         }
 
         internal static Result ReadFile(string path)

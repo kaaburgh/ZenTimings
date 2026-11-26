@@ -77,7 +77,7 @@ namespace ZenTimings.Cli
                 var states=new List<State>();
                 for(int i=0;i<3;i++)
                 {
-                    int o=first+i*0x164, eo=first+0x58F+i*0x1A;
+                    int o=first+i*0x164, eo=first+0x58F+i*0x19;
                     uint clk=U32(p,o),dfi=U32(p,o+4);
                     if(clk!=clocks[i] || dfi*2!=clk || U32(p,o+8)!=0) return null;
                     var timings=new SortedDictionary<string,uint>(StringComparer.Ordinal);
@@ -104,9 +104,10 @@ namespace ZenTimings.Cli
                         foreach(var f in refresh)
                             if(!slot.data.ddr5.jedec_refresh_ns.TryGetValue(f.Key,out int ns) ||
                                 Math.Abs(f.Value-ns*clk/1000.0)>1.01) return null;
-                    var ex=p.Slice(eo,26);
+                    var ex=p.Slice(eo,25);
                     if(i==0 && (!mm.Slice(1,17).SequenceEqual(ex.Slice(1,17)) ||
-                                !mm.Slice(18,6).SequenceEqual(ex.Slice(20,6)))) return null;
+                                !mm.Slice(18,4).SequenceEqual(ex.Slice(20,4)))) return null;
+                    if(i>0 && !ex.SequenceEqual(p.Slice(first+0x58F+0x19,25))) return null;
                     if(g>0)
                     {
                         var prev=groups[0].states[i];

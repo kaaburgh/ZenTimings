@@ -30,6 +30,7 @@ namespace ZenTimings.Cli
             public ApobDdr5Config.Result ddr5_config { get; init; }
             public ApobTrainingStructure.Result ddr5_training_structure { get; init; }
             public ApobBootInfo.Result ddr5_boot_info { get; init; }
+            public ApobHealthSummary.Result health_summary { get; init; }
         }
         private const string Note="APOB is firmware boot/training data, not a live sensor. Layouts inherited from pinned ZenStates-Core; HMAC not verified. No raw bytes or serial numbers exported. No automatic UMC association.";
         private static uint U32(byte[] b,int o)=>BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(o,4));
@@ -157,6 +158,7 @@ namespace ZenTimings.Cli
                     ddr5_config=ddr5Config,
                     ddr5_training_structure=ApobTrainingStructure.Decode(b,raw,ddr5Config),
                     ddr5_boot_info=ApobBootInfo.Decode(b,raw,ddr5Config),
+                    health_summary=ApobHealthSummary.Decode(b,raw,h.version,h.header,validatedLegacySpd,spd),
                     gen_config=ApobLegacyConfig.Decode(b,raw,h.version,h.header,validatedLegacySpd,electrical,spd)
                 };
         }

@@ -282,6 +282,18 @@ namespace ZenTimings.Cli
                         Console.WriteLine("    "+result.ddr5_config.replay_correlation.note);
                     Console.WriteLine("    "+result.ddr5_config.note);
                 }
+                if(result.health_summary!=null)
+                {
+                    var health=result.health_summary;
+                    var events=health.event_log;
+                    if(events!=null)
+                        Console.WriteLine($"  APOB event log: {events.stored_count}/{events.declared_count} events; "+string.Join(", ",events.severity_counts.Select(p=>$"{p.Key}={p.Value}")));
+                    if(health.pmu_training_failure!=null)
+                        Console.WriteLine($"  PMU training failure record all zero: {health.pmu_training_failure.all_zero_payload}");
+                    if(health.mbist_result!=null)
+                        Console.WriteLine($"  MBIST record all zero: {health.mbist_result.all_zero_payload}");
+                    Console.WriteLine("    "+health.note);
+                }
                 if(result.ddr5_boot_info!=null)
                 {
                     var boot=result.ddr5_boot_info;

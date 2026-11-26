@@ -797,10 +797,11 @@ namespace ZenTimings.BiosOrigin
                 return "AmdSetupRPL size is not 0x6D5";
             if (aod == null || aod.Length != layout.Fingerprint.AodSize)
                 return "AodSetupRpl size is not 0x1AC";
+            // DRFXI 1.15/1.17 CbsSetupDxeRPL updates +8 with a CBS settings
+            // fingerprint during APCB synchronization. It is not layout identity.
             if (U32(amd, 0) != layout.Fingerprint.AmdSignature
-                || U32(amd, 4) != (uint)layout.Fingerprint.AmdLength
-                || U32(amd, 8) != layout.Fingerprint.AmdGeneration)
-                return "AmdSetupRPL header signature / length / generation differs from the DRFXI layout";
+                || U32(amd, 4) != (uint)layout.Fingerprint.AmdLength)
+                return "AmdSetupRPL header signature / length differs from the DRFXI layout";
             if (aod[0x3C] != 1 && aod[0x3C] != 255)
                 return "AOD Active Memory Timing Settings gate invalid";
             if (amd[0x116] != 1 && amd[0x116] != 255)
@@ -872,7 +873,6 @@ namespace ZenTimings.BiosOrigin
             [DataMember(Name = "amdSize")] public int AmdSize;
             [DataMember(Name = "amdSignature")] public uint AmdSignature;
             [DataMember(Name = "amdLength")] public int AmdLength;
-            [DataMember(Name = "amdGeneration")] public uint AmdGeneration;
             [DataMember(Name = "aodSize")] public int AodSize;
         }
 

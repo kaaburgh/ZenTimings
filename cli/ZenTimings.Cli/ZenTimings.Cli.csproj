@@ -22,5 +22,19 @@
     <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR4/Profiles/Ddr4XmpProfile.cs" Link="Upstream/Hardware/DRAM/DDR4/Profiles/Ddr4XmpProfile.cs" />
     <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR4/Thermal/Ddr4ThermalData.cs" Link="Upstream/Hardware/DRAM/DDR4/Thermal/Ddr4ThermalData.cs" />
     <Compile Include="../../ZenStates-Core/Hardware/DRAM/ManufacturerMapping.cs" Link="Upstream/Hardware/DRAM/ManufacturerMapping.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Spd/Ddr5BaseDecoder.cs" Link="Upstream/Hardware/DRAM/DDR5/Spd/Ddr5BaseDecoder.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Spd/Ddr5CommonDecoder.cs" Link="Upstream/Hardware/DRAM/DDR5/Spd/Ddr5CommonDecoder.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Spd/Ddr5SpdBytes.cs" Link="Upstream/Hardware/DRAM/DDR5/Spd/Ddr5SpdBytes.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Spd/Ddr5SpdDecoder.cs" Link="Upstream/Hardware/DRAM/DDR5/Spd/Ddr5SpdDecoder.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Spd/Ddr5SpdDevice.cs" Link="Upstream/Hardware/DRAM/DDR5/Spd/Ddr5SpdDevice.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Spd/Ddr5SpdInfo.cs" Link="Upstream/Hardware/DRAM/DDR5/Spd/Ddr5SpdInfo.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Spd/Ddr5SpdTiming.cs" Link="Upstream/Hardware/DRAM/DDR5/Spd/Ddr5SpdTiming.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Spd/Ddr5SpdTimingMath.cs" Link="Upstream/Hardware/DRAM/DDR5/Spd/Ddr5SpdTimingMath.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Spd/Lpddr5BaseDecoder.cs" Link="Upstream/Hardware/DRAM/DDR5/Spd/Lpddr5BaseDecoder.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Profiles/Ddr5ProfileDecoder.cs" Link="Upstream/Hardware/DRAM/DDR5/Profiles/Ddr5ProfileDecoder.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Profiles/Ddr5XmpProfile.cs" Link="Upstream/Hardware/DRAM/DDR5/Profiles/Ddr5XmpProfile.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Profiles/Ddr5ExpoProfile.cs" Link="Upstream/Hardware/DRAM/DDR5/Profiles/Ddr5ExpoProfile.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Hub/Spd5118HubInfo.cs" Link="Upstream/Hardware/DRAM/DDR5/Hub/Spd5118HubInfo.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Thermal/Ddr5ThermalData.cs" Link="Upstream/Hardware/DRAM/DDR5/Thermal/Ddr5ThermalData.cs" />
   </ItemGroup>
 </Project>

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using ZenStates.Core.Hardware.DRAM.DDR4.Spd;
+using ZenStates.Core.Hardware.DRAM.DDR5.Spd;
 
 namespace ZenTimings.Cli
 {
@@ -19,6 +20,7 @@ namespace ZenTimings.Cli
             string manufacturer_jep106,int? tck_min_ps,int? jedec_rate_from_tck_mts)
         {
             public Ddr4Details ddr4 { get; init; }
+            public Ddr5Details ddr5 { get; init; }
         }
         internal sealed record XmpProfile(int profile_number,int? speed_mts,int? voltage_mv,int? tck_min_ps,
             SortedDictionary<string,int> timings_clocks,SortedDictionary<string,int> timings_ps,int[] supported_cl);
@@ -29,6 +31,68 @@ namespace ZenTimings.Cli
             int? jedec_speed_mts,int[] supported_cl,SortedDictionary<string,int> jedec_min_ps,
             SortedDictionary<string,int> jedec_timings_at_max_rate_clocks,string xmp_status,string xmp_revision,
             XmpProfile[] xmp_profiles);
+        internal sealed record Ddr5Profile(string kind,int profile_number,int? speed_mts,int? tck_min_ps,
+            int? vdd_mv,int? vddq_mv,int? vpp_mv,SortedDictionary<string,int> timings_ps,
+            SortedDictionary<string,int> refresh_ns,SortedDictionary<string,int> timings_clocks,int[] supported_cl);
+        internal sealed record Ddr5Details(string status,string module_type,string module_manufacturer,string dram_manufacturer,
+            long? capacity_mib,int? ranks_per_channel,int? logical_ranks_per_channel,int? subchannels_per_dimm,
+            int? primary_bus_width_bits,int? ecc_extension_bits,int? device_width_bits,int? die_density_mbit,
+            int? die_count,int? bank_groups,int? banks_per_group,int? row_bits,int? column_bits,
+            bool is_asymmetric,bool has_thermal_sensor,int? jedec_speed_mts,int[] supported_cl,
+            SortedDictionary<string,int> jedec_min_ps,SortedDictionary<string,int> jedec_refresh_ns,
+            SortedDictionary<string,int> jedec_timings_at_max_rate_clocks,string xmp_status,string xmp_revision,
+            string expo_status,string expo_revision,bool? expo_crc_valid,Ddr5Profile[] profiles);
+
+        private static Ddr5Details DecodeDdr5(byte[] b)
+        {
+            bool full=b.Length==1024;
+            var d=Ddr5SpdDecoder.Decode(b,!full);
+            if(!d.IsValid || (full && !d.BaseCrcValid)) return null;
+            var profiles=new List<Ddr5Profile>();
+            // Base CRC does not cover profile bytes. EXPO has its own CRC;
+            // upstream XMP decoder does not verify a profile checksum.
+            if(full && d.HasXmp)
+                foreach(var x in d.XmpProfiles.Where(x=>x!=null && x.IsValid))
+                    profiles.Add(new Ddr5Profile("XMP",x.ProfileNumber,Positive(x.SpeedMTs),Positive(x.tCKAVGminPs),
+                        Positive(x.VddMv),Positive(x.VddqMv),Positive(x.VppMv),
+                        PositiveTimings(("tAA",x.tAAminPs),("tRCD",x.tRCDminPs),("tRP",x.tRPminPs),
+                            ("tRAS",x.tRASminPs),("tRC",x.tRCminPs),("tWR",x.tWRminPs)),
+                        PositiveTimings(("tRFC",x.tRFC1minNs),("tRFC2",x.tRFC2minNs),("tRFCsb",x.tRFCsbMinNs)),
+                        PositiveTimings(("tCL",x.CL),("tRCD",x.tRCD),("tRP",x.tRP)),
+                        x.SupportedCLs?.ToArray()??Array.Empty<int>()));
+            if(full && d.HasExpo && d.ExpoCrcValid)
+                foreach(var x in new[]{d.ExpoProfile1,d.ExpoProfile2}.Where(x=>x!=null && x.IsValid))
+                    profiles.Add(new Ddr5Profile("EXPO",x.ProfileNumber,Positive(x.SpeedMTs),Positive(x.tCKAVGminPs),
+                        Positive(x.VddMv),Positive(x.VddqMv),Positive(x.VppMv),
+                        PositiveTimings(("tAA",x.tAAminPs),("tRCD",x.tRCDminPs),("tRP",x.tRPminPs),
+                            ("tRAS",x.tRASminPs),("tRC",x.tRCminPs),("tWR",x.tWRminPs),
+                            ("tRRDL",x.tRRD_L?.Ps??0),("tCCDL",x.tCCD_L?.Ps??0),
+                            ("tCCDL_WR",x.tCCD_L_WR?.Ps??0),("tCCDL_WR2",x.tCCD_L_WR2?.Ps??0),
+                            ("tFAW",x.tFAW?.Ps??0),("tCCDL_WTR",x.tCCD_L_WTR?.Ps??0),
+                            ("tCCDS_WTR",x.tCCD_S_WTR?.Ps??0),("tRTP",x.tRTP?.Ps??0)),
+                        PositiveTimings(("tRFC",x.tRFC1minNs),("tRFC2",x.tRFC2minNs),("tRFCsb",x.tRFCsbMinNs)),
+                        PositiveTimings(("tCL",x.CL),("tRCD",x.tRCD),("tRP",x.tRP),("tRAS",x.tRAS),
+                            ("tRC",x.tRC),("tWR",x.tWR),("tRRDL",x.tRRD_L?.Nck??0),("tCCDL",x.tCCD_L?.Nck??0),
+                            ("tCCDL_WR",x.tCCD_L_WR?.Nck??0),("tCCDL_WR2",x.tCCD_L_WR2?.Nck??0),
+                            ("tFAW",x.tFAW?.Nck??0),("tCCDL_WTR",x.tCCD_L_WTR?.Nck??0),
+                            ("tCCDS_WTR",x.tCCD_S_WTR?.Nck??0),("tRTP",x.tRTP?.Nck??0)),Array.Empty<int>()));
+            return new Ddr5Details(full?"full image; upstream decoder":"base fields only",
+                SafeText(d.ModuleTypeString),b.Length>=514?SafeText(d.ModuleManufacturer):null,
+                b.Length>=554?SafeText(d.DramManufacturer):null,d.TotalCapacityMB>0?d.TotalCapacityMB:null,
+                Positive(d.RanksPerChannel),Positive(d.LogicalRanksPerChannel),Positive(d.SubChannelsPerDimm),
+                Positive(d.PrimaryBusWidthBits),d.PrimaryBusWidthBits>0?d.BusWidthExtensionBits:null,
+                Positive(d.FirstDeviceWidthBits),Positive(d.FirstDieDensityMbit),Positive(d.FirstDieCount),
+                Positive(d.FirstBankGroups),Positive(d.FirstBanksPerBankGroup),Positive(d.FirstRowBits),Positive(d.FirstColumnBits),
+                d.IsAsymmetric,d.HasThermalSensor,Positive(d.SpeedMTs),d.SupportedCLs?.ToArray()??Array.Empty<int>(),
+                PositiveTimings(("tAA",d.tAAminPs),("tRCD",d.tRCDminPs),("tRP",d.tRPminPs),("tRAS",d.tRASminPs),
+                    ("tRC",d.tRCminPs),("tWR",d.tWRminPs)),
+                PositiveTimings(("tRFC",d.tRFC1minNs),("tRFC2",d.tRFC2minNs),("tRFCsb",d.tRFCsbMinNs)),
+                PositiveTimings(("tCL",d.CL),("tRCD",d.tRCD),("tRP",d.tRP),("tRAS",d.tRAS),("tRC",d.tRC),("tWR",d.tWR)),
+                !full?"unavailable: incomplete image":d.HasXmp?"present; checksum not verified":"not present",
+                full?SafeText(d.XmpRevision):null,
+                !full?"unavailable: incomplete image":!d.HasExpo?"not present":d.ExpoCrcValid?"CRC valid":"CRC mismatch; profiles omitted",
+                full?SafeText(d.ExpoRevision):null,full && d.HasExpo?d.ExpoCrcValid:null,profiles.ToArray());
+        }
         private static int? Positive(int x)=>x>0?x:null;
         private static string SafeText(string x)=>string.IsNullOrWhiteSpace(x)?null:
             new string(x.Trim().Select(c=>char.IsControl(c)?'?':c).ToArray());
@@ -210,6 +274,16 @@ namespace ZenTimings.Cli
                 }
                 catch(Exception ex) when(ex is ArgumentException || ex is IndexOutOfRangeException || ex is OverflowException)
                 { result=result with { status="base CRC valid; extended DDR4 decode failed: "+ex.GetType().Name }; }
+            }
+            else
+            {
+                try
+                {
+                    var details=DecodeDdr5(b);
+                    if(details!=null) result=result with { status="base CRC valid; DDR5 decoded",ddr5=details };
+                }
+                catch(Exception ex) when(ex is ArgumentException || ex is IndexOutOfRangeException || ex is OverflowException)
+                { result=result with { status="base CRC valid; extended DDR5 decode failed: "+ex.GetType().Name }; }
             }
             return result;
         }

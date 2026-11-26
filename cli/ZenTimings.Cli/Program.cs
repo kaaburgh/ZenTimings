@@ -282,6 +282,20 @@ namespace ZenTimings.Cli
                         Console.WriteLine("    "+result.ddr5_config.replay_correlation.note);
                     Console.WriteLine("    "+result.ddr5_config.note);
                 }
+                if(result.ddr5_training_structure!=null)
+                {
+                    var training=result.ddr5_training_structure;
+                    Console.WriteLine("  DDR5 PHY/PMU: bounded structural observations only");
+                    foreach(var phase in training.phy_phases)
+                        Console.WriteLine($"    MEM {phase.type}: {phase.record_count_candidate} candidate pairs, {phase.equal_adjacent_u16_pairs}/{phase.adjacent_u16_pairs} equal adjacent u16 pairs");
+                    var match=training.phy_fixed_alignment;
+                    if(match!=null)
+                        Console.WriteLine($"    PHY alignment +0x{match.mem30_offset_minus_mem31_bytes:X}: {match.shifted.equal_u16}/{match.shifted.compared_u16} equal u16 words; {match.shifted.equal_nonzero_u16} nonzero");
+                    var pmu=training.pmu_smb;
+                    if(pmu!=null)
+                        Console.WriteLine($"    PMU windows: {pmu.equal_bytes}/{pmu.compared_bytes} equal bytes, both rate words match GEN: {pmu.both_rate_words_match_highest_gen}");
+                    Console.WriteLine("    "+training.note);
+                }
                 if(result.replay!=null)
                 {
                     var replay=result.replay;

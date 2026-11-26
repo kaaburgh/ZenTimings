@@ -642,9 +642,9 @@ class CliTest(unittest.TestCase):
             header(x,n)
             pair(x,0x20,0xdead,0xb)
             companions.append(x)
-        def run(config=gen,rr=rep,mm=main,ss=spd,comps=companions,version=0x18,region_offset=4096,region_size=None):
+        def run(config=gen,rr=rep,mm=main,ss=spd,comps=companions,version=0x18,region_offset=4096,region_size=None,extra=b''):
             h=bytearray(0xa8)
-            out=h+ss+mm+config+rr+b"".join(comps)
+            out=h+ss+mm+config+rr+b"".join(comps)+extra
             struct.pack_into("<IIII",out,0,0x424f5041,version,len(out),len(h))
             f=self.root/"donor.bin"
             prefix=bytearray(b"APOB"+bytes(4092))
@@ -796,6 +796,36 @@ class CliTest(unittest.TestCase):
         self.assertIsNotNone(j["ddr5_config"])
         self.assertIsNone(j["replay"])
         self.assertIsNone(run(version=0x19)["ddr5_config"])
+        # Aggregate training-structure tests: synthetic payloads only.
+        phases=[bytearray(x) for x in companions]
+        # Match an invented nonzero sequence in both candidate streams.
+        motif=struct.pack("<16H",*range(100,116))
+        phases[0][48+32+0x2fc+64:48+32+0x2fc+96]=motif
+        phases[1][48+32+64:48+32+96]=motif
+        pmu=entry(1,5,16432)
+        stride=0x1fa2
+        struct.pack_into("<H",pmu,48+2,4800)
+        struct.pack_into("<H",pmu,48+stride+2,4800)
+        x=run(comps=phases,extra=pmu)["ddr5_training_structure"]
+        self.assertIsNotNone(x)
+        self.assertEqual([p["record_count_candidate"] for p in x["phy_phases"]],[1280,1092])
+        self.assertEqual(x["phy_fixed_alignment"]["shifted"]["compared_u16"],4368)
+        self.assertEqual(x["phy_fixed_alignment"]["shifted"]["equal_nonzero_u16"],16)
+        self.assertEqual(x["pmu_smb"]["equal_bytes"],8098)
+        self.assertTrue(x["pmu_smb"]["both_rate_words_match_highest_gen"])
+        # The opaque trailing bytes cannot change aggregate output.
+        other=[bytearray(p) for p in phases]
+        other[1][48+0x2240:]=bytes([0xAB])*1504
+        pmu2=bytearray(pmu)
+        pmu2[48+2*stride:]=bytes([0xCD])*188
+        self.assertEqual(run(comps=other,extra=pmu2)["ddr5_training_structure"],x)
+        # No training projection without independently corroborated replay.
+        self.assertIsNone(run(rr=bad,extra=pmu)["ddr5_training_structure"])
+        # Reject duplicate PMU records without suppressing independent phases.
+        self.assertIsNone(run(comps=phases,extra=pmu+pmu)["ddr5_training_structure"]["pmu_smb"])
+        pmu3=bytearray(pmu)
+        struct.pack_into("<H",pmu3,48+stride+2,3200)
+        self.assertFalse(run(comps=phases,extra=pmu3)["ddr5_training_structure"]["pmu_smb"]["both_rate_words_match_highest_gen"])
 
     def test_apob_directory_metadata(self):
         import struct

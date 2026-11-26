@@ -37,13 +37,15 @@ namespace ZenTimings.Windows
         }
 
         private readonly Apob _apob;
+        private readonly bool _liveSnapshot;
 
-        public ApobInfoWindow(Apob apob)
+        public ApobInfoWindow(Apob apob, bool liveSnapshot = false)
         {
             InitializeComponent();
             _apob = apob;
+            _liveSnapshot = liveSnapshot;
             Fill();
-            CompareAfuButton.IsEnabled = _apob != null && _apob.Address == DrfxiApobComparison.RamAddress &&
+            CompareAfuButton.IsEnabled = _liveSnapshot && _apob != null && _apob.Address == DrfxiApobComparison.RamAddress &&
                 _apob.RawTable != null && _apob.RawTable.Length >= 16;
         }
 
@@ -688,7 +690,7 @@ namespace ZenTimings.Windows
             {
                 // Reuse the already acquired live snapshot. No driver calls,
                 // firmware writes, refresh or raw data export on this path.
-                if (_apob == null || _apob.Address != DrfxiApobComparison.RamAddress || _apob.RawTable == null)
+                if (!_liveSnapshot || _apob == null || _apob.Address != DrfxiApobComparison.RamAddress || _apob.RawTable == null)
                     throw new InvalidDataException("No cached DRFXI APOB snapshot.");
                 var input = new Microsoft.Win32.OpenFileDialog
                 {

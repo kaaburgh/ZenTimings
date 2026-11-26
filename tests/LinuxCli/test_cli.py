@@ -865,6 +865,28 @@ class CliTest(unittest.TestCase):
         self.assertEqual(run(ss=ids2,extra=masked)["ddr5_boot_info"],info)
         self.assertIsNone(run(ss=ids,extra=boot+boot)["ddr5_boot_info"])
         self.assertIsNone(run(ss=ids,rr=bad,extra=boot)["ddr5_boot_info"])
+        # Health summary remains available even when GEN/replay is rejected.
+        log=entry(7,6,1076)
+        struct.pack_into("<H",log,48,3)
+        for i,cl in enumerate((2,6,12345678)):
+            struct.pack_into("<4I",log,48+4+16*i,cl,0xDEADBEEF,0xABCDEF01,0x12345678)
+        failure=entry(1,22,1012)
+        mbist=entry(1,18,140)
+        failure[-1]=1
+        health=run(rr=bad,extra=log+failure+mbist)["health_summary"]
+        self.assertEqual(health["event_log"]["declared_count"],3)
+        self.assertEqual(health["event_log"]["severity_counts"],{"Bounds check":1,"Warning":1,"Unknown class":1})
+        self.assertTrue(health["event_log"]["unused_slots_all_zero"])
+        self.assertFalse(health["pmu_training_failure"]["all_zero_payload"])
+        self.assertTrue(health["mbist_result"]["all_zero_payload"])
+        # Event parameters cannot alter the summary.
+        changed=bytearray(log)
+        changed[48+4+4:48+4+16]=b"PRIVATE DATA"
+        self.assertEqual(run(rr=bad,extra=changed+failure+mbist)["health_summary"],health)
+        changed[-1]=1
+        self.assertFalse(run(extra=changed)["health_summary"]["event_log"]["unused_slots_all_zero"])
+        self.assertIsNone(run(extra=log+log)["health_summary"])
+        self.assertIsNone(run(extra=log,version=0x19)["health_summary"])
 
     def test_apob_directory_metadata(self):
         import struct

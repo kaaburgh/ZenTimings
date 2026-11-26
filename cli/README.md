@@ -187,3 +187,27 @@ The original v0x18 donor decoder is deliberately retained for the verified 4800/
 The optional `ddr5_config.layout` distinguishes `ddr5-donor-v0x18` from `ddr5-v0x18-same-layout-candidate`; `replay_correlation` contains the matching fields and refresh candidates. The original donor may still produce configuration without replay; the fallback must have both. Synthetic DDR5-6000 CL36 tests exercise changed top clock, timing, tREFI and tuned tRFC values distinct from SPD-like slots, plus rejection of contradictory/missing replay. **Not evidence of compatibility with any real overclocked BD790i image.** Other entry sizes, state counts, record counts, marker sequences, DFI relationships or different topology are still unsupported. No generic scanning or live hardware writes.
 
 PR20 real artifact validation (run 45809265386, 7e85475): both donor and M75n have exact advertised region matches, official DRFXI 1.15 exposes the same 160 KiB NV region as the donor but no valid APOB. The DDR5 extended replay dictionary selection defect in PR19 is fixed in PR20. PR21 real artifact validation (run 45809542776, fd63cd0): metadata and companion counts match the M75n binary observations, donor and M75n retain all prior values apart from additive fields, official image still exits 1.
+
+
+### Donor firmware lineage and DRFXI 1.17 comparison
+
+Read-only comparison of the supplied acquisition archive: all five distinct DRFXI update versions (1.04, 1.07, 1.12, 1.15, 1.17; duplicate 1.15 mirrors byte-identical) have two identical checksummed BL2 directories at 0x51D000/0x8E5000, Fletcher32 0x31F6602A, directory SHA-256 f55144c56f64dc3cfcb2a0c25490ab6c6e387c0148ccf8222ce19e40baeebc1e. Both advertise NV region 0x125000/0x28000 and RAM destination 0x0A200000. Each official NV region is entirely FF (163840 bytes); no complete persisted APOB was found. The donor's directories match these exactly. This does not establish identical AGESA or active directory selection.
+
+UEFIExtract NE alpha 75 report comparison and SHA-256 of actual extracted PE32/TE section bodies (not FFS compression or wrapper checksums) establish that **all twelve selected donor modules equal the corresponding DRFXI 1.12 module bodies**. The donor is still third-party and not a verified stock image. SHA-256 prefixes and exact differences for later versions:
+
+| Module | Donor and 1.12 SHA256 prefix | 1.15 prefix | 1.17 prefix | Changed bytes 1.15→1.17 |
+|---|---|---|---|---:|
+| ApobRplPei | b2021fcd946ab4ab | 6e1b28da7d3b730a | 6e1b28da7d3b730a | 0 |
+| ApobRplDxe | f3cc6d39060924d8 | 47e631cda76df799 | 72b66f99f33c79a9 | 3 |
+| AmdMemoryHobInfoPeimRpl | a995cae4cf37fcd6 | d95ce31f39cd5f27 | d95ce31f39cd5f27 | 0 |
+| AmdMemRestorePei | fc40bcc7e74a1ee9 | 59abbae0ee6dafe6 | 59abbae0ee6dafe6 | 0 |
+| AmdMemRestoreDxe | b99aca1edc89b1a4 | 86f92d74669c50ea | 86f92d74669c50ea | 0 |
+| AmdMemRestoreDxeV2 | d446a28297c8faa3 | dd42e4c9de3388ad | aaf10deb1ea09543 | 3 |
+| AmdApcbDxeV3 | 91d9d0004a9955b6 | 7d42c7eefdb02ce2 | 2b64af679df42c41 | 11 |
+| AmdApcbSmmV3 | 3a9ebddb7a5308b8 | 9dd2f6fc7be93f9f | ebcedaf6b3542fbb | 11 |
+| AmdPspPeiV2Rpl | 5c969f4d12a530fa | 1dfd1bc8646a99fd | 1dfd1bc8646a99fd | 0 |
+| AmdPspDxeV2Rpl | e4ed4b7d43a7e204 | a02a604e957946d4 | a0bb73cab9d1c80d | 12 |
+| AmdPspP2CmboxV2 | 71e2e54c3934aada | 6b797546540e3ba6 | b49431b668fe3c80 | 7 |
+| AmdAgesaParameterGroupPei | 427895defe9e27fc | 8861e6c9e49be09c | 8861e6c9e49be09c | 0 |
+
+All 47 changed bytes in the six different PE32 bodies occur in .text at immediate operands incremented by exactly 3 (e.g. 0x3EA→0x3ED, 0x3EB→0x3EE, 0x48D→0x490), consistent with shifted identifiers, possibly PCD token numbers. The other PE sections and headers are identical; no semantic token attribution is asserted. This is not a comparison of PSP/ABL binaries or a proof that memory training is unchanged. UEFIExtract multi-GUID extraction reports duplicate-directory errors for repeated PEI copies; validated actual extracted section bodies against the named modules and report sizes, and compared all found body hashes. No executable body or firmware bytes are committed.

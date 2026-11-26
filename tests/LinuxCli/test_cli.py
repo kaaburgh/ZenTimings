@@ -524,6 +524,147 @@ class CliTest(unittest.TestCase):
         self.assertFalse(run(prefix,code=1)["available"])
         self.invoke("--apob-image",str(f),"--apob",code=2,live=False)
 
+    def test_ddr5_donor_apob(self):
+        import struct
+        import binascii
+        def entry(g,t,size):
+            b=bytearray(size)
+            struct.pack_into("<IIII",b,0,g,t,0,size)
+            return b
+        # Real donor base CRC bytes, public module identification only.
+        # No original serial, manufacturing location/date or vendor extension.
+        d=bytearray(1024)
+        for off,hx in (
+            (0,"30101203040040420000000090020000"),
+            (16,"00000000a001f2037a0d00000000803e"),
+            (32,"803e803e007d80bb30752701a0008200"),
+            (64,"000000000000881308881308204e2010"),
+            (80,"27101a4128102710c409044c1d0c0000"),
+            (192,"10008632801580ce8214000000000000"),
+            (224,"0000000000000f110281002200000000"),
+            (496,"00000000000000000000000000000925"),
+        ):
+            d[off:off+16]=bytes.fromhex(hx)
+        d[512:514]=bytes.fromhex("80ce")
+        d[521:551]=b"M425R1GB4BB0-CQKOL".ljust(30)
+        d[552:554]=bytes.fromhex("80ce")
+        self.assertEqual(binascii.crc_hqx(d[:510],0),0x2509)
+        spd=entry(1,17,4196)
+        spd[48:50]=bytes((1,2))
+        for ch in range(2):
+            o=52+ch*1036
+            spd[o+1]=1
+            spd[o+9]=ch
+            spd[o+12:o+1036]=d
+        main=entry(1,25,96)
+        m=bytes.fromhex("01000000060605000000010705070c1c0c1e5d5834340100")
+        main[48:]=m*2
+        gen=entry(7,3,6020)
+        fields=(0x0c,0x10,0x14,0x18,0x1c,0x20,0x24,0x28,0x2c,0x30,
+                0x34,0x38,0x3c,0x40,0x5c,0x64,0x68,0x6c,0xc4,0xc8,
+                0x100,0x104,0x108,0x118,0x11c)
+        for g in range(2):
+            base=0x630+g*0x7a0
+            for i,(clk,values,refresh) in enumerate((
+                (2400,(40,39,39,39,77,116,38,8,12,40,24,6,18,72,732,18,18,9347,13,38,12,48,24,1536,264),(708,384,312)),
+                (1600,(26,26,26,26,52,77,24,8,8,40,16,4,12,48,487,12,12,6222,13,25,8,32,16,1024,176),(471,256,208)),
+                (1000,(22,16,16,16,32,48,20,8,8,40,16,4,12,48,305,8,8,3889,13,16,8,32,16,1024,176),(295,160,130)),
+            )):
+                o=48+base+i*0x164
+                struct.pack_into("<II",gen,o,clk,clk//2)
+                for off,v in zip(fields,values):
+                    struct.pack_into("<I",gen,o+off,v)
+                for off in (0x84,0x8c,0x98):
+                    struct.pack_into("<I",gen,o+off,refresh[0])
+                for off in (0x90,0x9c):
+                    struct.pack_into("<I",gen,o+off,refresh[1])
+                for off in (0xa8,0xb0):
+                    struct.pack_into("<I",gen,o+off,refresh[2])
+                e=48+base+0x58f+i*0x1a
+                gen[e:e+26]=bytes.fromhex(
+                    "00000000060605000000010705070c1c0c1e1e1e5d5834340100" if i==0 else
+                    "0000040404010000010505070c1e0c1e1e1e633f2727000000")
+        rep=entry(7,4,15312)
+        def pair(buf,offset,a,v):
+            struct.pack_into("<II",buf,48+offset,a,v)
+        def header(buf,n):
+            struct.pack_into("<8I",buf,48,0x40004,0,1,0,n,0,0x80008,0x80101)
+        header(rep,1081)
+        pair(rep,0x20,0xdead,0x1a)
+        pair(rep,0x38,0xdead,0x1b)
+        for ch in range(2):
+            for i,(a,v) in enumerate((
+                (0x50100,0x201),(0x50100,0x701),(0x5012c,0x15381148),
+                (0x50200,0x80050960),(0x50204,0x27274d28),(0x50208,0x270074),
+                (0x5020c,0x12000c08),(0x50210,0x28),(0x50214,0x180626),
+                (0x50218,0x48),(0x50220,0x05010606),(0x50224,0x11010f0f),
+                (0x50228,0x1007),(0x50230,0x302483),(0x50260,0x018002c4),
+                (0x502c0,0x00480138),
+            )):
+                pair(rep,0x100+ch*0x1000+i*8,a|(ch<<20),v)
+        pair(rep,0x21e0,0x6a3b4,0x437)
+        pair(rep,0x21e8,0x50204,0xdeadbeef) # outside bounded records
+        companions=[]
+        for t,n in ((30,1280),(31,1092)):
+            x=entry(1,t,10320)
+            header(x,n)
+            pair(x,0x20,0xdead,0xb)
+            companions.append(x)
+        def run(config=gen,rr=rep,mm=main,ss=spd,comps=companions,version=0x18):
+            h=bytearray(0xa8)
+            out=h+ss+mm+config+rr+b"".join(comps)
+            struct.pack_into("<IIII",out,0,0x424f5041,version,len(out),len(h))
+            f=self.root/"donor.bin"
+            f.write_bytes(b"APOB"+bytes(4092)+out)
+            j=json.loads(self.invoke("--apob-image",str(f),"--json",live=False).stdout)["apob"]
+            self.assertEqual(f.read_bytes(),b"APOB"+bytes(4092)+out)
+            self.assertEqual(j["image_offset"],"0x00001000")
+            return j
+        j=run()
+        self.assertEqual(len(j["spd"]),2)
+        for s in j["spd"]:
+            self.assertTrue(s["data"]["base_crc_valid"])
+            d5=s["data"]["ddr5"]
+            self.assertEqual(d5["capacity_mib"],8192)
+            self.assertEqual(d5["device_width_bits"],16)
+            self.assertEqual(d5["jedec_speed_mts"],4800)
+            self.assertEqual(d5["profiles"],[])
+        cfg=j["ddr5_config"]
+        self.assertIsNotNone(cfg)
+        self.assertEqual(len(cfg["groups"]),2)
+        for g in cfg["groups"]:
+            self.assertEqual(g["mem25_record"]["ProcOdt"]["code"],12)
+            self.assertEqual([s["nominal_rate_mts"] for s in g["states"]],[4800,3200,2000])
+            self.assertEqual([s["timings_clocks"]["tCL"] for s in g["states"]],[40,26,22])
+            self.assertEqual(g["states"][0]["refresh_candidates_clocks"],{"tRFC":708,"tRFC2":384,"tRFCsb":312})
+            self.assertEqual(g["states"][0]["refresh_slot_words"]["0x88"],0)
+            self.assertEqual(g["states"][0]["electrical_candidates"]["ProcOdt"]["code"],12)
+        rr=j["replay"]
+        self.assertIsNotNone(rr)
+        self.assertEqual(rr["layout"],"ddr5-donor-v0x18")
+        self.assertEqual(rr["record_count"],1081)
+        self.assertEqual(rr["end_exclusive"],0x21e8)
+        self.assertEqual(rr["opaque_trailing_bytes"],6584)
+        for c in rr["channels"]:
+            self.assertEqual(c["nominal_mclk_mhz"],2400)
+            self.assertEqual(c["candidate_timings"]["tCL"],40)
+            self.assertEqual(c["candidate_timings"]["tREFI"],9347)
+            self.assertEqual(c["candidate_timings"]["GDM"],1)
+            self.assertEqual(c["refresh_word_candidates"][f'0x{(c["umc_address_index"]<<20)|0x50260:08X}'],{"tRFC":708,"tRFC2":384})
+            self.assertEqual(c["refresh_word_candidates"][f'0x{(c["umc_address_index"]<<20)|0x502c0:08X}'],{"tRFCsb":312})
+        bad=bytearray(gen)
+        struct.pack_into("<I",bad,48+0x630+0x84,709)
+        self.assertIsNone(run(config=bad)["ddr5_config"])
+        bad=bytearray(main)
+        bad[48+14]^=1
+        self.assertIsNone(run(mm=bad)["ddr5_config"])
+        bad=bytearray(rep)
+        struct.pack_into("<I",bad,48+16,1082)
+        j=run(rr=bad)
+        self.assertIsNotNone(j["ddr5_config"])
+        self.assertIsNone(j["replay"])
+        self.assertIsNone(run(version=0x19)["ddr5_config"])
+
     def test_ddr5_spd_profiles(self):
         import struct
         import binascii

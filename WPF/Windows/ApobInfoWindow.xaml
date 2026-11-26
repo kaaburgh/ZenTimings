@@ -230,10 +230,14 @@
 
         <!-- Status bar -->
         <Border Grid.Row="2" Style="{DynamicResource BottomPanelStyles}">
-            <TextBlock x:Name="StatusText"
-                       Text="Ready"
-                       Style="{StaticResource LabelStyle}"
-                       TextTrimming="CharacterEllipsis"/>
+            <DockPanel>
+                <Button x:Name="CompareAfuButton" DockPanel.Dock="Right" Content="Compare with DRFXI AFU..."
+                        IsEnabled="False" Padding="6,2" Margin="4,0"
+                        ToolTip="Compare cached APOB with a local AFU file. No raw data is saved."
+                        Click="CompareAfu_Click"/>
+                <TextBlock x:Name="StatusText" Text="Ready" Style="{StaticResource LabelStyle}"
+                           TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
         </Border>
     </Grid>
 </local:ThemedWindow>

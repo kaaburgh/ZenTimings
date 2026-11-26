@@ -298,3 +298,26 @@ Next useful experiment is a second AFU at unchanged settings after a possible co
 The board owner captured two AFU images before and after shutdown with AC power removed, without changing memory settings. The v4 allowlist reports were byte-identical. A separate local equality-only comparison of the original images reports different full images and changes outside the APOB NV region, but exact byte equality of the entire 72,576-byte APOB, its header, all 26 entries (12 known records and 14 others), and the remaining bytes of its reserved NV region. In particular, the full GEN, UMC replay, PMU SMB, MEM30 and MEM31 payloads and their bounded bodies/tails are identical, not merely their aggregated statistics. The MEM16 candidate last-training-date word is unchanged. No original firmware, byte values, identity/date values or private file hashes were transferred to this repository.
 
 This establishes persistence of the saved training context across this power cycle. It is consistent with MCR/reuse, but does not establish that firmware skipped retraining: a fresh training run could leave the nonvolatile copy untouched, and the calendar date has day-level resolution. The full image difference rules out identical whole-file content but does not establish which non-APOB state changed. This is not an independently varied training sample; do not use it as such for PHY field attribution. No further power cycles or BIOS setting changes are needed to reproduce the equality finding.
+
+
+### DRFXI RAM APOB vs persisted SPI comparison
+
+The two checksummed factory BL2 directories and captured DRFXI images agree on RAM destination 0x0A200000 and NV offset 0x125000, capacity 0x28000. This is an advertised address, not permission to read physical memory. The pinned ZenStates-Core Apob.cs already reads a physical table and retains RawTable; the Windows APOB Info window now offers **Compare with DRFXI AFU...** using only that cached snapshot, with no new driver operations or raw export. Restart the application normally for a fresh snapshot; the button does not trigger another physical read. If the existing APOB acquisition is unavailable, do not disable driver protections.
+
+Linux explicit live comparison (only on DRFXI board_name and the existing supported DDR5 CPUID):
+
+```sh
+sudo ./zentimings --apob-compare-image /path/to/local-afu.bin > bd790i-ram-spi-comparison.json
+```
+
+Check exit code before sharing (0 = completed comparison, even if different; 1 = unavailable; 2 = invalid arguments). It validates the local AFU before opening /dev/mem, requires an exclusively reserved/NVS /proc/iomem interval, reads a fixed 16-byte header at the one known address then two complete bounded tables; requires byte equality of both reads and the initial header. No arbitrary address input, memory scanning, kernel changes, new driver, firmware writes or fallback when access is denied. Equality between reads is a consistency check, not atomicity. If denied, stop; Windows existing cached APOB is the preferred alternate route. Do not weaken security protections.
+
+Offline comparison with a locally held complete APOB binary (no acquisition; file stays private):
+
+```sh
+./zentimings --apob-compare-image local-afu.bin --apob-compare-file local-apob.bin
+```
+
+The common pure comparator requires exact 32 MiB image, both known directory copies and Fletcher checksums, exact expected RAM/NV entries, known persisted v0x18 / 0xA8 / 72576-byte / 26-entry layout, unique bounded entries, and two CRC-valid DDR5 SPD slots on both sides. Nonblank identities at both slots must match (including module/DRAM vendor, serial and part number; never serialized). The observed table can differ in length or entry layout, provided it has a valid v0x18 bounded contiguous structure and matching SPD identity. Known entries compared only when their unencrypted type/instance/size matches; unknown entries contribute to whole-table/layout equality only. Header and identity-bearing records have equality flags only; training date word compared without exposing value. Other known payloads report changed-byte totals, not values or exact positions. No source filename, original bytes, serial, hash, date, raw register or full APOB is in the result. Still review before sharing: memory data equality statistics can fingerprint a configuration.
+
+This is a same-board snapshot comparison, not proof of acquisition time or MCR execution. It does not measure active controller registers, and cannot distinguish a fresh training whose outputs are identical. A changed RAM table can also result from DXE updates or a different snapshot time, so compare known records separately rather than concluding retrain solely from table inequality. Tests use synthetic identities, changed payload/header/date, duplicate entries, CRC and identity rejection, directory checksums, and two-read stability without hardware. No private AFU or report committed.

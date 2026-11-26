@@ -1705,7 +1705,7 @@ namespace ZenTimings
             {
                 // A window opened from a debug report shows the APOB of the report
                 var apob = isMockWindow ? mockData?.Apob : cpu?.info.apob;
-                apobInfoWnd = new ApobInfoWindow(apob)
+                apobInfoWnd = new ApobInfoWindow(apob, !isMockWindow)
                 {
                     Owner = this
                 };

@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -189,12 +190,38 @@ internal static class Program
         Check(!LinuxApob.Allowed(LinuxApob.ParseMap(new[]{"00000000-00000000 : reserved"}),0x04000000,16),"APOB masked map rejected");
     }
 
+    private static void ApobStableComparison()
+    {
+        // Only tests the read sequencing and bounds; no device access.
+        var table=new byte[72576];
+        var h=table.AsSpan(0,16);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(h,0x424f5041);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(h[4..],0x18);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(h[8..],(uint)table.Length);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(h[12..],0xa8);
+        var sizes=new System.Collections.Generic.List<int>();
+        byte[] Read(int n) { sizes.Add(n);return table[..n]; }
+        var result=LinuxApob.StableDrfxiComparison(Read);
+        Check(result.Length==72576 && sizes.SequenceEqual(new[]{16,72576,72576}),"DRFXI two equal bounded reads");
+        int calls=0;
+        Fails<System.IO.InvalidDataException>(()=>LinuxApob.StableDrfxiComparison(n=>{
+            var b=table[..n];
+            if(++calls==3) b[b.Length-1]=1;
+            return b;
+        }),"DRFXI unstable payload rejected even with equal header");
+        table[0]=0;
+        sizes.Clear();
+        Fails<System.IO.InvalidDataException>(()=>LinuxApob.StableDrfxiComparison(Read),"DRFXI invalid signature");
+        Check(sizes.SequenceEqual(new[]{16}),"no body read on invalid header");
+    }
+
     private static void Main()
     {
         M75nCapture();
         PowerTableCaptures();
         ExtendedCapture();
         ApobRangePolicy();
+        ApobStableComparison();
         foreach(bool ddr5 in new[]{false,true})
         {
             var cpu=new RunningTimings.CpuId("AuthenticAMD",ddr5?0x19:0x17,ddr5?0x61:0x18);

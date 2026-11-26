@@ -4,6 +4,7 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../Common/DrfxiApobComparison.cs" Link="DrfxiApobComparison.cs" />
     <Compile Include="../../cli/ZenTimings.Cli/TimingDictionaryAdapter.cs" Link="TimingDictionaryAdapter.cs" />
     <Compile Include="../../cli/ZenTimings.Cli/LinuxPowerTable.cs" Link="LinuxPowerTable.cs" />
     <Compile Include="../../cli/ZenTimings.Cli/ExtendedUmc.cs" Link="ExtendedUmc.cs" />

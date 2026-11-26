@@ -92,6 +92,7 @@
     <Compile Include="..\Common\BiosMemController.cs">
       <Link>Common\BiosMemController.cs</Link>
     </Compile>
+    <Compile Include="..\Common\DrfxiApobComparison.cs"><Link>Common\DrfxiApobComparison.cs</Link></Compile>
     <Compile Include="..\Common\CpuSingleton.cs">
       <Link>Common\CpuSingleton.cs</Link>
     </Compile>

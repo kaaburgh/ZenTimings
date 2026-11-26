@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using ZenStates.Core.Hardware.Apob;
 using ZenStates.Core.Common;
+using ZenTimings.Common;
 
 namespace ZenTimings.Cli
 {
@@ -309,6 +310,50 @@ namespace ZenTimings.Cli
             }
             catch(Exception ex) { diagnostics.Add(ex.GetType().Name+": "+ex.Message); }
             return Failure("live",diagnostics.ToArray());
+        }
+
+        // Explicit comparison mode, narrower than generic --apob. Never use
+        // an input file to select an arbitrary physical address.
+        internal static byte[] CaptureDrfxiComparison()
+        {
+            if(!OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("Live comparison requires Linux.");
+            var cpu=RunningTimings.Identify();
+            string board=File.ReadAllText("/sys/class/dmi/id/board_name").Trim();
+            if(RunningTimings.MemoryType(cpu)!=1 ||
+               board.IndexOf("DRFXI",StringComparison.OrdinalIgnoreCase)<0)
+                throw new InvalidDataException("Live comparison requires recognized DRFXI and supported DDR5 CPU.");
+            const long address=DrfxiApobComparison.RamAddress;
+            var map=ParseMap(File.ReadLines("/proc/iomem"));
+            if(!Allowed(map,address,16))
+                throw new InvalidDataException("APOB address not exclusively reserved/NVS; no physical read attempted.");
+            using var f=File.OpenHandle("/dev/mem",FileMode.Open,FileAccess.Read,FileShare.ReadWrite);
+            byte[] Read(int count)
+            {
+                if(!Allowed(map,address,count))
+                    throw new InvalidDataException("APOB crosses reserved range boundary.");
+                byte[] data=new byte[count];
+                int done=0;
+                while(done<count)
+                {
+                    int n=RandomAccess.Read(f,data.AsSpan(done),address+done);
+                    if(n==0) throw new EndOfStreamException("Short physical read.");
+                    done+=n;
+                }
+                return data;
+            }
+            return StableDrfxiComparison(Read);
+        }
+
+        internal static byte[] StableDrfxiComparison(Func<int,byte[]> read)
+        {
+            var header=read(16);
+            int n=DrfxiApobComparison.GetTableSize(header);
+            var first=read(n);
+            var second=read(n);
+            if(first.Length!=n || second.Length!=n || !first.AsSpan(0,16).SequenceEqual(header) ||
+                !first.AsSpan().SequenceEqual(second))
+                throw new InvalidDataException("APOB changed or was incomplete during two reads.");
+            return first;
         }
 
         private static Result Failure(string source,string[] diagnostics)=>

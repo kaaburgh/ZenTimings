@@ -17,7 +17,13 @@ namespace ZenTimings.Cli
             SortedDictionary<string,uint> refresh_slot_words,SortedDictionary<string,uint> refresh_candidates_clocks,
             int payload_electrical_offset,SortedDictionary<string,LinuxApob.Value> electrical_candidates);
         internal sealed record Group(int group_index,SortedDictionary<string,LinuxApob.Value> mem25_record,State[] states);
-        internal sealed record Result(string status,uint entry_offset,Group[] groups,string note);
+        internal sealed record ReplayCorrelation(int[] umc_address_indices,string[] matched_primary_fields,
+            SortedDictionary<string,uint> matching_refresh_candidates,string note);
+        internal sealed record Result(string status,uint entry_offset,Group[] groups,string note)
+        {
+            public string layout { get; init; }
+            public ReplayCorrelation replay_correlation { get; init; }
+        }
         private static readonly (string name,int off)[] Fields={
             ("tCL",0x0C),("tRCDWR",0x10),("tRCDRD",0x14),("tRP",0x18),("tRAS",0x1C),("tRC",0x20),
             ("tCWL",0x24),("tRRDS",0x28),("tRRDL",0x2C),("tFAW",0x30),("tWTRL",0x34),("tWTRS",0x38),
@@ -53,7 +59,42 @@ namespace ZenTimings.Cli
             Add("DramVrefCa",new DramVref(b[v+2]));Add("DramVrefCs",new DramVref(b[v+3]));
             return r;
         }
-        internal static Result Decode(byte[] b,List<ApobEntry> entries,uint version,int header,IReadOnlyList<LinuxApob.SpdSlot> spd)
+        // Validate a non-donor candidate against independently observed UMC
+        // words in both address blocks. This does not select live/P-state
+        // values or associate any physical DIMM/channel.
+        internal static ReplayCorrelation Correlate(Result config,ApobReplay.Result replay)
+        {
+            if(config==null || replay==null || replay.channels.Length!=2) return null;
+            var state=config.groups[0].states[0];
+            string[] fields={"tCL","tCWL","tFAW","tRAS","tRC","tRCDRD","tRCDWR","tREFI",
+                "tRP","tRRDL","tRRDS","tRTP","tWR","tWTRL","tWTRS"};
+            var expected=new SortedDictionary<string,uint>(StringComparer.Ordinal);
+            // The alternate slots are independently supported by SPD minima.
+            // Nonzero standard-layout slots are only candidates until they
+            // match the observed replay. A zero standard slot is unavailable.
+            foreach(var f in new[]{(name:"tRFC",key:"0x88"),(name:"tRFC2",key:"0x94"),(name:"tRFCsb",key:"0xAC")})
+            {
+                uint mapped=state.refresh_slot_words[f.key];
+                expected[f.name]=mapped!=0?mapped:state.refresh_candidates_clocks[f.name];
+            }
+            foreach(var c in replay.channels)
+            {
+                if(c.nominal_mclk_mhz!=state.memclk_mhz ||
+                    fields.Any(k=>!c.candidate_timings.TryGetValue(k,out uint value) || value!=state.timings_clocks[k]))
+                    return null;
+                // tRFC and tRFC2 must match one complete word, not be
+                // cherry-picked from unrelated register candidates.
+                if(!c.refresh_word_candidates.Values.Any(w=>
+                        w.TryGetValue("tRFC",out uint a) && a==expected["tRFC"] &&
+                        w.TryGetValue("tRFC2",out uint b) && b==expected["tRFC2"]) ||
+                   !c.refresh_word_candidates.Values.Any(w=>
+                        w.TryGetValue("tRFCsb",out uint a) && a==expected["tRFCsb"])) return null;
+            }
+            return new ReplayCorrelation(replay.channels.Select(x=>x.umc_address_index).ToArray(),fields,expected,
+                "Highest saved GEN state matches both UMC replay address blocks in 15 primary/secondary/refresh-interval fields and complete observed tRFC/tRFC2 and tRFCsb candidates. Nonzero standard refresh slots compared preferentially, otherwise SPD-like alternate slots. No proof of active state, effective refresh selection, physical group mapping or present hardware.");
+        }
+
+        internal static Result Decode(byte[] b,List<ApobEntry> entries,uint version,int header,IReadOnlyList<LinuxApob.SpdSlot> spd,bool variant=false)
         {
             if(version!=0x18 || header!=0xA8 || spd.Count!=2 ||
                !spd.Select(s=>s.channel).OrderBy(x=>x).SequenceEqual(new[]{0,1}) ||
@@ -79,7 +120,13 @@ namespace ZenTimings.Cli
                 {
                     int o=first+i*0x164, eo=first+0x58F+i*0x19;
                     uint clk=U32(p,o),dfi=U32(p,o+4);
-                    if(clk!=clocks[i] || dfi*2!=clk || U32(p,o+8)!=0) return null;
+                    if(dfi>4000 || dfi*2!=clk || U32(p,o+8)!=0) return null;
+                    if(variant)
+                    {
+                        if(clk<400 || clk>4000 || (i==0 && clk<1000) ||
+                            (i>0 && clk>=states[i-1].memclk_mhz)) return null;
+                    }
+                    else if(clk!=clocks[i]) return null;
                     var timings=new SortedDictionary<string,uint>(StringComparer.Ordinal);
                     foreach(var f in Fields) timings[f.name]=U32(p,o+f.off);
                     if(timings["tCL"]<10 || timings["tCL"]>100 || timings["tCWL"]<5 ||
@@ -93,7 +140,8 @@ namespace ZenTimings.Cli
                     // Standard desktop offsets +88/+94/+AC are zero here.
                     // Only report the alternate copies when duplicated and
                     // independently consistent with both validated SPD minima.
-                    if(U32(p,o+0x88)!=0 || U32(p,o+0x94)!=0 || U32(p,o+0xAC)!=0 ||
+                    if((!variant && (U32(p,o+0x88)!=0 || U32(p,o+0x94)!=0 || U32(p,o+0xAC)!=0)) ||
+                       raw.Values.Any(v=>v>65535) ||
                        r1==0 || r2==0 || rs==0 || r1<r2 || r2<rs ||
                        U32(p,o+0x8C)!=r1 || U32(p,o+0x98)!=r1 ||
                        U32(p,o+0x9C)!=r2 || U32(p,o+0xB0)!=rs) return null;
@@ -111,14 +159,14 @@ namespace ZenTimings.Cli
                     if(g>0)
                     {
                         var prev=groups[0].states[i];
-                        if(!prev.timings_clocks.SequenceEqual(timings) || !prev.refresh_slot_words.SequenceEqual(raw)) return null;
+                        if(prev.memclk_mhz!=clk || prev.dfi_clk_mhz!=dfi || !prev.timings_clocks.SequenceEqual(timings) || !prev.refresh_slot_words.SequenceEqual(raw)) return null;
                     }
                     states.Add(new State(i,o,clk,dfi,clk*2,timings,raw,refresh,eo,Electrical(ex,true)));
                 }
                 groups.Add(new Group(g,Electrical(mm,false),states.ToArray()));
             }
-            return new Result("experimental DDR5 v0x18 donor configuration",gen.Offset,groups.ToArray(),
-                "Saved frequency blocks and electrical record candidates, not live measurements. Layout identified by donor structure, not CPU ID. MEM25 main and first extended record agree at mapped offsets. Refresh alternatives correlate with SPD and duplicate slots; not proof of selected UMC refresh mode. No automatic group/UMC/DIMM or P-state mapping; Gdm is saved code, not a live register interpretation. HMAC not verified.");
+            return new Result(variant?"experimental DDR5 v0x18 same-layout candidate":"experimental DDR5 v0x18 donor configuration",gen.Offset,groups.ToArray(),
+                "Saved frequency blocks and electrical record candidates, not live measurements. Layout identified by donor structure, not CPU ID. MEM25 main and first extended record agree at mapped offsets. Refresh alternatives correlate with SPD and duplicate slots; not proof of selected UMC refresh mode. No automatic group/UMC/DIMM or P-state mapping; Gdm is saved code, not a live register interpretation. HMAC not verified.") { layout=variant?"ddr5-v0x18-same-layout-candidate":"ddr5-donor-v0x18" };
         }
     }
 }

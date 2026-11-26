@@ -631,7 +631,7 @@ class CliTest(unittest.TestCase):
                 (0x5020c,0x12000c08),(0x50210,0x28),(0x50214,0x180626),
                 (0x50218,0x48),(0x50220,0x05010606),(0x50224,0x11010f0f),
                 (0x50228,0x1007),(0x50230,0x302483),(0x50260,0x018002c4),
-                (0x502c0,0x00480138),
+                (0x502c0,0x00480138),(0x50284,0x00000220),
             )):
                 pair(rep,0x100+ch*0x1000+i*8,a|(ch<<20),v)
         pair(rep,0x21e0,0x6a3b4,0x437)
@@ -772,6 +772,9 @@ class CliTest(unittest.TestCase):
         self.assertEqual(j["replay"]["record_count"],811)
         self.assertEqual(j["replay"]["end_exclusive"],0x1978)
         self.assertEqual(j["replay"]["companions"],[])
+        for c in j["replay"]["channels"]:
+            fields=c["candidate_extended_fields"]
+            self.assertEqual([fields[k] for k in ("NitroRxData","NitroTxData","NitroCtrlLine")],[2,2,0])
         malformed=bytearray(two)
         struct.pack_into("<I",malformed,48+0x630+2*0x164+0x0c,1)
         self.assertIsNone(run(config=malformed,rr=two_rep)["ddr5_config"])

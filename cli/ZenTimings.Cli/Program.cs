@@ -226,6 +226,16 @@ namespace ZenTimings.Cli
                 if(result.available)
                     Console.WriteLine($"  {result.source}; address {result.address??"-"}; version 0x{result.version:X}; {result.table_size} bytes; {result.entries.Length} entries");
                 if(result.image_offset!=null) Console.WriteLine("  SPI image offset: "+result.image_offset);
+                if(result.bios_directory!=null)
+                {
+                    var dir=result.bios_directory;
+                    Console.WriteLine("  BIOS directory: "+dir.status);
+                    foreach(var region in dir.nv_regions) Console.WriteLine($"    Advertised NV region {region.image_offset}, {region.size} bytes; directories {string.Join(", ",region.directory_offsets)}");
+                    foreach(var addr in dir.advertised_ram_addresses) Console.WriteLine("    Advertised RAM destination "+addr);
+                    if(dir.matched_nv_region.HasValue) Console.WriteLine("    Exact NV region match: "+dir.matched_nv_region.Value);
+                    foreach(var unresolved in dir.unresolved_nv_entries) Console.WriteLine("    Unresolved: "+unresolved);
+                    Console.WriteLine("    "+dir.note);
+                }
                 foreach(var d in result.diagnostics) Console.WriteLine("  "+d);
                 foreach(var c in result.electrical)
                 {

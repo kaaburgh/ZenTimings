@@ -384,6 +384,21 @@ class CliTest(unittest.TestCase):
         # Sparse replay fixture: only the independently matched public UMC
         # words/markers from M33KT24A, no original opaque payload or hashes.
         gen3=entry(7,3,5356)
+        # GEN 7/3: real timing and MR values in a synthetic payload.
+        for g,base in enumerate((0xaf8,0xc88,0xde8,0xf50)):
+            for i,(clk,timings,mr0,mr2,mr6) in enumerate((
+                (1200,(17,12,17,17,9,39,56,18,7,3,36,8,9,6),0x096d,0x00d8,0x080e),
+                (1067,(15,11,15,15,8,35,50,16,6,3,32,7,8,6),0x0739,0x00d0,0x080e),
+                (933,(13,10,13,13,7,30,43,14,5,3,29,6,7,5),0x0529,0x00c8,0x040e),
+                (800,(11,9,11,11,6,26,37,12,5,2,28,6,6,5),0x0319,0x00c0,0x040e),
+            )):
+                o=48+base+i*0x54
+                struct.pack_into("<12H",gen3,o-24,550,550,300,1280,1830,600,
+                                 212,100,1400 if i==3 else 1200,256,300,(200,224,214,250)[i])
+                struct.pack_into("<HH",gen3,o,clk,0)
+                gen3[o+4:o+18]=bytes(timings)
+                struct.pack_into("<III",gen3,o+0x12,350,260,160)
+                struct.pack_into("<7H",gen3,o+0x2a,mr0,1,mr2,0,8,0x0560,mr6-(g%2))
         replay=entry(7,4,13904)
         struct.pack_into("<I",replay,48+16,1454)
         def pair(buf,offset,a,v):
@@ -443,10 +458,33 @@ class CliTest(unittest.TestCase):
             pair(a,0x20+n*8-16,0xffffdead,0x20)
             pair(a,0x20+n*8-8,0xffffdead,0x17)
             companions.append(a)
-        def with_replay(rep=replay,comps=companions,version=0x13):
-            out=h+cfg+other+spd+gen3+rep+b"".join(comps)
+        def with_config(rep=replay,comps=companions,version=0x13,gen=gen3):
+            out=h+cfg+other+spd+gen+rep+b"".join(comps)
             struct.pack_into("<II",out,4,version,len(out))
-            return run(prefix+out)["replay"]
+            return run(prefix+out)
+        def with_replay(**kw):
+            return with_config(**kw)["replay"]
+        gc=with_config()["gen_config"]
+        self.assertIsNotNone(gc)
+        self.assertEqual(len(gc["groups"]),4)
+        for g in gc["groups"]:
+            self.assertEqual([st["memclk_mhz"] for st in g["states"]],[1200,1067,933,800])
+            self.assertEqual([st["nominal_rate_mts"] for st in g["states"]],[2400,2133,1867,1600])
+            self.assertEqual([st["matches_boot_memclk"] for st in g["states"]],[True,False,False,False])
+            self.assertEqual([st["timings_clocks"]["tCL"] for st in g["states"]],[17,15,13,11])
+            self.assertEqual(g["states"][0]["config_min_ps"]["tRCD"],13750)
+            self.assertEqual(g["states"][3]["config_min_ps"]["tFAW"],35000)
+            for st in g["states"]:
+                self.assertEqual(st["refresh_ns"],{"tRFC":350,"tRFC2":260,"tRFC4":160})
+                mr=st["mode_registers"]
+                self.assertEqual(mr["dram_drive_ohm"],34)
+                self.assertEqual(mr["rtt_park_code"],5)
+                self.assertAlmostEqual(mr["initial_vref_dq_percent_vddq"],69.1 if g["group_index"]%2==0 else 68.45)
+        badgen=bytearray(gen3)
+        badgen[48+0xaf8+0x2a]=0 # invalid MR0 CL
+        self.assertIsNone(with_config(gen=badgen)["gen_config"])
+        self.assertIsNotNone(with_replay(gen=badgen))
+        self.assertIsNone(with_config(version=0x14)["gen_config"])
         rr=with_replay()
         self.assertIsNotNone(rr)
         self.assertEqual(rr["record_count"],1454)

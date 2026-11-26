@@ -42,5 +42,7 @@
     <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Hub/Spd5118HubInfo.cs" Link="Upstream/Hardware/DRAM/DDR5/Hub/Spd5118HubInfo.cs" />
     <Compile Include="../../ZenStates-Core/Hardware/DRAM/DDR5/Thermal/Ddr5ThermalData.cs" Link="Upstream/Hardware/DRAM/DDR5/Thermal/Ddr5ThermalData.cs" />
     <Compile Include="../../cli/ZenTimings.Cli/SpdOfflinePmicAdapter.cs" Link="SpdOfflinePmicAdapter.cs" />
+    <Compile Include="../../ZenStates-Core/Hardware/Apob/ApobDdr4ModeRegisters.cs" Link="Upstream/Hardware/Apob/ApobDdr4ModeRegisters.cs" />
+    <Compile Include="../../cli/ZenTimings.Cli/ApobLegacyConfig.cs" Link="ApobLegacyConfig.cs" />
   </ItemGroup>
 </Project>

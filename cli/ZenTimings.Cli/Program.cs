@@ -251,6 +251,19 @@ namespace ZenTimings.Cli
                     }
                     Console.WriteLine("    "+result.gen_config.note);
                 }
+                if(result.ddr5_config!=null)
+                {
+                    Console.WriteLine("  DDR5 donor GEN configuration (saved states; group mapping unknown)");
+                    foreach(var g in result.ddr5_config.groups)
+                        foreach(var s in g.states)
+                        {
+                            Console.WriteLine($"    Group {g.group_index} state {s.state_index}: DDR5-{s.nominal_rate_mts}, MCLK {s.memclk_mhz}, DFI {s.dfi_clk_mhz} MHz");
+                            Console.WriteLine("    Candidate timings: "+string.Join(", ",s.timings_clocks.Select(p=>$"{p.Key}={p.Value}")));
+                            Console.WriteLine("    Refresh candidates: "+string.Join(", ",s.refresh_candidates_clocks.Select(p=>$"{p.Key}={p.Value}")));
+                            Console.WriteLine("    Electrical candidates: "+string.Join(", ",s.electrical_candidates.Select(p=>$"{p.Key}={p.Value.display}")));
+                        }
+                    Console.WriteLine("    "+result.ddr5_config.note);
+                }
                 if(result.replay!=null)
                 {
                     var replay=result.replay;

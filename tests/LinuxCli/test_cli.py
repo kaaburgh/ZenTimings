@@ -386,6 +386,73 @@ class CliTest(unittest.TestCase):
         self.assertFalse(run(prefix,code=1)["available"])
         self.invoke("--apob-image",str(f),"--apob",code=2,live=False)
 
+    def test_ddr5_spd_profiles(self):
+        import struct
+        import binascii
+        b=bytearray(1024)
+        b[:8]=bytes((0x30,0x10,0x12,0x03,0x04,0x00,0x20,0x42))
+        b[234]=0
+        b[235]=0x22
+        def w(off,value):
+            struct.pack_into("<H",b,off,value)
+        w(20,357)
+        w(22,625)
+        b[25]=0x10
+        for off,value in zip(range(30,48,2),(14000,14000,14000,32000,46000,30000,295,160,130)):
+            w(off,value)
+        b[512:514]=bytes((0,0x2c))
+        b[517:521]=b"SECR"
+        b[521:551]=b"SYNTHETIC-DDR5".ljust(30)
+        b[640:644]=bytes((0x0c,0x4a,0x30,1))
+        b[704:707]=bytes((0x44,0x28,0x28))
+        w(709,333)
+        b[712]=0x20
+        for off,value in zip(range(717,735,2),(10000,12000,12000,32000,44000,30000,295,160,130)):
+            w(off,value)
+        b[832:838]=b"EXPO"+bytes((0x10,1))
+        b[842:845]=bytes((0x27,0x27,0x44))
+        for off,value in zip(range(846,866,2),(333,10000,12000,12000,32000,44000,30000,295,160,130)):
+            w(off,value)
+        w(866,6000)
+        w(958,binascii.crc_hqx(b[832:958],0))
+        w(510,binascii.crc_hqx(b[:510],0))
+        root=self.root/"bus/i2c/devices/0-0050"
+        root.mkdir(parents=True)
+        driver=self.root/"bus/i2c/drivers/spd5118"
+        driver.mkdir(parents=True)
+        (root/"driver").symlink_to(driver,target_is_directory=True)
+        f=root/"eeprom"
+        def read(data,code=0):
+            f.write_bytes(data)
+            out=self.invoke("--modules","--json",code=code).stdout
+            self.assertNotIn("SECR",out)
+            self.assertEqual(f.read_bytes(),data)
+            return json.loads(out)["memory_inventory"]["spd"][0]
+        d=read(b)["ddr5"]
+        self.assertEqual(d["jedec_speed_mts"],5600)
+        self.assertEqual(d["subchannels_per_dimm"],2)
+        self.assertEqual(d["device_width_bits"],8)
+        self.assertEqual(d["jedec_refresh_ns"]["tRFC"],295)
+        self.assertTrue(d["expo_crc_valid"])
+        self.assertEqual([p["kind"] for p in d["profiles"]],["XMP","EXPO"])
+        x,e=d["profiles"]
+        self.assertEqual(x["speed_mts"],6000)
+        self.assertEqual(x["vdd_mv"],1400)
+        self.assertEqual(e["speed_mts"],6000)
+        self.assertEqual(e["vdd_mv"],1350)
+        self.assertEqual(e["timings_ps"]["tRRDL"],6000)
+        b[958]^=1
+        d=read(b)["ddr5"]
+        self.assertFalse(d["expo_crc_valid"])
+        self.assertEqual([p["kind"] for p in d["profiles"]],["XMP"])
+        d=read(b[:512])["ddr5"]
+        self.assertEqual(d["profiles"],[])
+        self.assertIsNone(d["expo_crc_valid"])
+        b[20]^=1
+        d=read(b,code=1)
+        self.assertFalse(d["base_crc_valid"])
+        self.assertIsNone(d["ddr5"])
+
     def test_arguments_and_non_uefi(self):
         self.invoke("--debug", "--json", code=2)
         self.invoke("--board", "X670E Steel Legend", "--bios", "1.21", code=2)

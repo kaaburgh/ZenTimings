@@ -743,6 +743,44 @@ class CliTest(unittest.TestCase):
             if struct.unpack_from("<I",wrong,o)[0]==0x150260:
                 struct.pack_into("<I",wrong,o+4,0x019001e1)
         self.assertIsNone(run(config=tuned,rr=wrong)["ddr5_config"])
+        # Synthetic two-state layout: manual RFC1 in +84, JEDEC-like
+        # copies in +8C/+98, absent third state and shorter replay.
+        # Arbitrary test values, not a user's actual AFU data.
+        two=bytearray(tuned)
+        two_rep=bytearray(tuned_rep)
+        for g in range(2):
+            base=48+0x630+g*0x7a0
+            for off,v in ((0x84,510),(0x88,0),(0x94,0),(0xac,0)):
+                struct.pack_into("<I",two,base+off,v)
+            two[base+2*0x164:base+3*0x164]=bytes(0x164)
+        struct.pack_into("<I",two_rep,48+16,811)
+        # End at +1978: leave the former donor terminator and opaque
+        # suffix outside the shorter bounded stream.
+        for o in range(48+32,48+0x1978,8):
+            addr=struct.unpack_from("<I",two_rep,o)[0]&~0x100000
+            if addr==0x50260:
+                struct.pack_into("<I",two_rep,o+4,(480<<16)|510)
+            if addr==0x502c0:
+                struct.pack_into("<I",two_rep,o+4,0x00480186)
+        j=run(config=two,rr=two_rep)
+        vc=j["ddr5_config"]
+        self.assertIsNotNone(vc)
+        self.assertEqual(vc["unused_trailing_state_slots_per_group"],1)
+        self.assertEqual([len(g["states"]) for g in vc["groups"]],[2,2])
+        self.assertEqual(vc["replay_correlation"]["matching_refresh_candidates"],{"tRFC":510,"tRFC2":480,"tRFCsb":390})
+        self.assertEqual(vc["groups"][0]["states"][0]["refresh_slot_words"]["0x8C"],885)
+        self.assertEqual(j["replay"]["record_count"],811)
+        self.assertEqual(j["replay"]["end_exclusive"],0x1978)
+        self.assertEqual(j["replay"]["companions"],[])
+        malformed=bytearray(two)
+        struct.pack_into("<I",malformed,48+0x630+2*0x164+0x0c,1)
+        self.assertIsNone(run(config=malformed,rr=two_rep)["ddr5_config"])
+        mismatch=bytearray(two_rep)
+        for o in range(48+32,48+0x1978,8):
+            if struct.unpack_from("<I",mismatch,o)[0]==0x150260:
+                struct.pack_into("<I",mismatch,o+4,(480<<16)|511)
+        self.assertIsNone(run(config=two,rr=mismatch)["ddr5_config"])
+        self.assertIsNone(run(config=two,rr=tuned_rep)["ddr5_config"])
         bad=bytearray(gen)
         struct.pack_into("<I",bad,48+0x630+0x84,709)
         self.assertIsNone(run(config=bad)["ddr5_config"])

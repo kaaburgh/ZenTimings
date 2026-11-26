@@ -1145,6 +1145,18 @@ class CliTest(unittest.TestCase):
         self.invoke("--mcr", "--apob", code=2)
         self.invoke("--mcr", "--compare", code=2)
 
+    def test_umc_report_arguments(self):
+        self.invoke("--umc-report", "missing.json", code=2, live=False)
+        self.invoke("--apob-image", "missing.bin", "--umc-report", "missing.json",
+                    "--timings", code=2, live=False)
+        self.invoke("--apob-image", "missing.bin", "--umc-report", "missing.json",
+                    "--apob-file", "missing-apob.bin", code=2, live=False)
+        p = self.invoke("--apob-image", "private-image.bin", "--umc-report",
+                        "private-report.json", code=1, live=False)
+        self.assertNotIn("private-image", p.stdout)
+        self.assertNotIn("private-report", p.stdout)
+        self.assertFalse(json.loads(p.stdout)["apob_umc_correlation"]["available"])
+
     def test_arguments_and_non_uefi(self):
         self.invoke("--debug", "--json", code=2)
         self.invoke("--board", "X670E Steel Legend", "--bios", "1.21", code=2)

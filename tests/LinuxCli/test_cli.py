@@ -376,7 +376,7 @@ class CliTest(unittest.TestCase):
             details=sp["ddr4"]
             self.assertEqual(details["capacity_mib"],4096)
             self.assertEqual(details["package_ranks"],1)
-            self.assertEqual(details["device_width_bits"],8)
+            self.assertEqual(details["device_width_bits"],16)
             self.assertEqual(details["jedec_speed_mts"],2667)
             self.assertEqual(details["xmp_profiles"],[])
             self.assertEqual(details["xmp_status"],"not present")

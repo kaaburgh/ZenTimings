@@ -215,8 +215,55 @@ internal static class Program
         Check(sizes.SequenceEqual(new[]{16}),"no body read on invalid header");
     }
 
+    private static void ApobUmcReportCorrelation()
+    {
+        foreach(bool ddr5 in new[]{false,true})
+        {
+            var cpu=new RunningTimings.CpuId("AuthenticAMD",ddr5?0x19:0x17,ddr5?0x61:0x18);
+            var raw=Fixture(ddr5);
+            var snap=RunningTimings.Capture(cpu,a=>raw[a],"ryzen_smu");
+            var report=new {schema_version=1,running_available=true,experimental=true,source=snap.Source,
+                cpu=snap.Cpu,channels=snap.Channels.Select(c=>new {channel=c.Index,memory_type=c.MemoryType,
+                    registers=c.Registers,extended=c.Extended}).ToArray()};
+            var json=System.Text.Json.JsonSerializer.Serialize(report);
+            using var doc=System.Text.Json.JsonDocument.Parse(json);
+            var parsed=ApobUmcCorrelation.ParseReport(doc.RootElement);
+            var words=new SortedDictionary<string,ApobReplay.Register>(StringComparer.Ordinal);
+            foreach(var pair in snap.Channels[0].Registers)
+                words.Add(pair.Key,new ApobReplay.Register(pair.Value,Array.Empty<ApobReplay.Observation>()));
+            // Same timing fields despite a non-timing bit-31 change; missing
+            // refresh word must be counted as missing, not mismatch.
+            words["0x00050100"]=new ApobReplay.Register(ddr5?"0x80000001":"0x80000000",Array.Empty<ApobReplay.Observation>());
+            words.Remove("0x00050264");
+            words["0x00050204"]=new ApobReplay.Register(
+                $"0x{raw[0x50204]^1:X8}",Array.Empty<ApobReplay.Observation>());
+            var replayChannel=new ApobReplay.Channel(0,null,words,Array.Empty<string>(),
+                new SortedDictionary<string,uint>(),new SortedDictionary<string,uint>(),
+                new SortedDictionary<string,SortedDictionary<string,uint>>());
+            var replay=new ApobReplay.Result("fixture",0,0,0,0,0,new SortedDictionary<string,int>(),
+                Array.Empty<ApobReplay.Companion>(),new[]{replayChannel},"fixture") {
+                    layout=ddr5?"ddr5-donor-v0x18":"picasso-v0x13" };
+            var result=ApobUmcCorrelation.Compare(replay,parsed);
+            Check(result.available,"offline correlation available");
+            var row=result.channels.Single();
+            Check(row.compared_registers==words.Count && row.equal_registers==words.Count-2,"word intersection and mismatches");
+            Check(row.config_bit31_only_difference==true,"bit 31 only");
+            Check(row.running_only_addresses.SequenceEqual(new[]{"0x00050264"}),"missing replay not mismatched");
+            Check(row.timing_fields.differing_fields.SequenceEqual(new[]{"tCL"}),"decoded field mismatch");
+            Check(row.replay_nominal_mclk_mhz==row.running_nominal_mclk_mhz,"nominal ratio match");
+            Check(!ApobUmcCorrelation.Compare(replay,parsed with { Type=ddr5?0:1 }).available,"memory type mismatch");
+            using var duplicate=System.Text.Json.JsonDocument.Parse(json.Replace("\"schema_version\":1","\"schema_version\":1,\"schema_version\":1"));
+            Fails<InvalidDataException>(()=>ApobUmcCorrelation.ParseReport(duplicate.RootElement),"duplicate schema rejected");
+            using var wrong=System.Text.Json.JsonDocument.Parse(json.Replace("0x00050204","0x00150204"));
+            Fails<InvalidDataException>(()=>ApobUmcCorrelation.ParseReport(wrong.RootElement),"other UMC address rejected");
+            using var missing=System.Text.Json.JsonDocument.Parse(json.Replace("\"0x00050204\"", "\"0x00050205\""));
+            Fails<InvalidDataException>(()=>ApobUmcCorrelation.ParseReport(missing.RootElement),"unknown address rejected");
+        }
+    }
+
     private static void Main()
     {
+        ApobUmcReportCorrelation();
         M75nCapture();
         PowerTableCaptures();
         ExtendedCapture();

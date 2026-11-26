@@ -535,6 +535,43 @@ class CliTest(unittest.TestCase):
             self.assertIn(f"0x{(ch<<20)|0x50264:08X}",c["missing_registers"])
             self.assertEqual(len(c["observed_registers"]),25)
             self.assertEqual(len(c["missing_registers"]),10)
+        # End-to-end correlation of a valid existing image and complete
+        # schema-1 UMC report. Only selected synthetic/sanitized words.
+        bank={0x50000:1,0x50008:0,0x50100:0x80000200,0x5012c:0x71100460,
+              0x50200:0x124,0x50204:0x11112711,0x50208:0x00110038,
+              0x5020c:0x09000807,0x50210:0x24,0x50214:0x0009030c,
+              0x50218:0x12,0x50220:0x03010303,0x50224:0x03010505,
+              0x50228:0xa00,0x50230:0x2494,0x50254:0x06040008,
+              0x50260:0x3049c9a5,0x50264:0x21060138,0x50df0:0x20024}
+        snapshot={"schema_version":1,"running_available":True,"experimental":True,
+                  "source":"ryzen_smu","cpu":{"Vendor":"AuthenticAMD","Family":23,"Model":24},
+                  "private_extra":"NOT-FOR-EXPORT",
+                  "channels":[{"channel":ch,"memory_type":"DDR4","extended":None,
+                               "registers":{f"0x{a|(ch<<20):08X}":f"0x{v:08X}" for a,v in bank.items()}}
+                              for ch in range(2)]}
+        report=self.root/"private-timings.json"
+        report.write_text(json.dumps(snapshot))
+        before=f.read_bytes()
+        p=self.invoke("--apob-image",str(f),"--umc-report",str(report),live=False)
+        result=json.loads(p.stdout)["apob_umc_correlation"]
+        self.assertTrue(result["available"])
+        self.assertNotIn("NOT-FOR-EXPORT",p.stdout)
+        self.assertNotIn("private-timings",p.stdout)
+        self.assertNotIn("0x80000200",p.stdout)
+        self.assertEqual(f.read_bytes(),before)
+        for ch,row in enumerate(result["channels"]):
+            expected=set(snapshot["channels"][ch]["registers"]) & set(rr["channels"][ch]["observed_registers"])
+            self.assertEqual(row["compared_registers"],len(expected))
+            self.assertEqual(row["equal_registers"],len(expected)-1)
+            self.assertEqual(row["differing_register_addresses"],[f"0x{0x50100|(ch<<20):08X}"])
+            self.assertTrue(row["config_bit31_only_difference"])
+            self.assertEqual(row["timing_fields"]["differing_fields"],[])
+            self.assertEqual(row["running_nominal_mclk_mhz"],1200)
+        # No arbitrary report field is trusted to bypass word validation.
+        del snapshot["channels"][0]["registers"]["0x00050204"]
+        report.write_text(json.dumps(snapshot))
+        p=self.invoke("--apob-image",str(f),"--umc-report",str(report),code=1,live=False)
+        self.assertFalse(json.loads(p.stdout)["apob_umc_correlation"]["available"])
         bad=bytearray(replay)
         struct.pack_into("<I",bad,48+16,0xffffffff)
         self.assertIsNone(with_replay(rep=bad))
@@ -1144,6 +1181,18 @@ class CliTest(unittest.TestCase):
         self.invoke("--mcr", "--debug", code=2)
         self.invoke("--mcr", "--apob", code=2)
         self.invoke("--mcr", "--compare", code=2)
+
+    def test_umc_report_arguments(self):
+        self.invoke("--umc-report", "missing.json", code=2, live=False)
+        self.invoke("--apob-image", "missing.bin", "--umc-report", "missing.json",
+                    "--timings", code=2, live=False)
+        self.invoke("--apob-image", "missing.bin", "--umc-report", "missing.json",
+                    "--apob-file", "missing-apob.bin", code=2, live=False)
+        p = self.invoke("--apob-image", "private-image.bin", "--umc-report",
+                        "private-report.json", code=1, live=False)
+        self.assertNotIn("private-image", p.stdout)
+        self.assertNotIn("private-report", p.stdout)
+        self.assertFalse(json.loads(p.stdout)["apob_umc_correlation"]["available"])
 
     def test_arguments_and_non_uefi(self):
         self.invoke("--debug", "--json", code=2)

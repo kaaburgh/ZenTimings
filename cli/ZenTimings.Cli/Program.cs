@@ -31,6 +31,8 @@ namespace ZenTimings.Cli
               zentimings --apob [--json]
               zentimings --apob-file FILE [--json]
               zentimings --apob-image FILE [--json]
+              zentimings --apob-image FILE --umc-report REPORT
+              zentimings --apob-file FILE --umc-report REPORT
               zentimings --apob-compare-image AFU [--apob-compare-file APOB] [--json]
               zentimings --debug
               zentimings --replay FILE [--board BOARD --bios VERSION] [--json]
@@ -43,6 +45,7 @@ namespace ZenTimings.Cli
             --apob: explicit read-only attempt at known reserved APOB addresses; respects kernel access restrictions.
             --apob-file: offline parsing of an existing complete APOB binary.
             --apob-image: find a unique validated persisted APOB in an existing SPI image file.
+            --umc-report: offline APOB versus previously captured --timings/--compare JSON; equality-only summary.
             --apob-compare-image: DRFXI only; equality-only JSON, compare local AFU with reserved RAM.
             --apob-compare-file: use an existing local APOB table instead of reading RAM (offline comparison).
             --mcr: saved DRFXI 1.15/1.17 CBS Memory Context Restore policy only; no runtime restore claim.
@@ -59,7 +62,7 @@ namespace ZenTimings.Cli
                 bool json = false, debug = false, origins = false, timings = false, compare = false, pmTable = false, extended = false, modules = false, apob = false;
                 bool mcr = false;
                 string apobCompareImage = null, apobCompareFile = null;
-                string apobImage = null, apobFile = null, replay = null, board = null, bios = null, root = "/sys";
+                string apobImage = null, apobFile = null, umcReport = null, replay = null, board = null, bios = null, root = "/sys";
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 for (int i = 0; i < args.Length; i++)
                 {
@@ -82,6 +85,7 @@ namespace ZenTimings.Cli
                         case "--apob": apob = true; break;
                         case "--apob-file": apobFile = Next(); break;
                         case "--apob-image": apobImage = Next(); break;
+                        case "--umc-report": umcReport = Next(); break;
                         case "--apob-compare-image": apobCompareImage = Next(); break;
                         case "--apob-compare-file": apobCompareFile = Next(); break;
                         case "--replay": replay = Next(); break;
@@ -91,6 +95,11 @@ namespace ZenTimings.Cli
                         default: throw new ArgumentException("Unknown option: " + arg);
                     }
                 }
+                if (umcReport != null &&
+                    ((apobImage == null) == (apobFile == null) ||
+                     seen.Any(x => x != "--umc-report" && x != "--apob-image" &&
+                         x != "--apob-file" && x != "--json")))
+                    throw new ArgumentException("--umc-report requires exactly one offline APOB image or table.");
                 if (mcr)
                 {
                     if (seen.Any(x => x != "--mcr" && x != "--json" && x != "--sysfs-root"))
@@ -146,7 +155,15 @@ namespace ZenTimings.Cli
                     if((apobFile!=null && apobImage!=null) || apob || modules || pmTable || extended || timings || compare || origins || debug ||
                         replay!=null || board!=null || bios!=null || seen.Contains("--sysfs-root"))
                         throw new ArgumentException("--apob-file and --apob-image are offline, standalone and mutually exclusive.");
-                    return PrintApob(apobImage!=null?LinuxApob.ReadImage(apobImage):LinuxApob.ReadFile(apobFile),json);
+                    var boot = apobImage != null ? LinuxApob.ReadImage(apobImage) : LinuxApob.ReadFile(apobFile);
+                    if (umcReport != null)
+                    {
+                        var comparison = ApobUmcCorrelation.CompareFile(boot, umcReport);
+                        Console.WriteLine(JsonSerializer.Serialize(new { schema_version = 1, apob_umc_correlation = comparison },
+                            new JsonSerializerOptions { WriteIndented = true }));
+                        return comparison.available ? 0 : 1;
+                    }
+                    return PrintApob(boot,json);
                 }
                 if(apob && (origins || debug || replay!=null || seen.Contains("--sysfs-root") ||
                     ((modules || pmTable) && !(timings || compare))))

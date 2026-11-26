@@ -664,6 +664,8 @@ class CliTest(unittest.TestCase):
         self.assertEqual(rr["end_exclusive"],0x21e8)
         self.assertEqual(rr["opaque_trailing_bytes"],6584)
         for c in rr["channels"]:
+            self.assertEqual(c["candidate_extended_fields"]["UclkGtFclk"],1)
+            self.assertEqual(c["candidate_extended_fields"]["BankGroupEn"],1)
             self.assertEqual(c["nominal_mclk_mhz"],2400)
             self.assertEqual(c["candidate_timings"]["tCL"],40)
             self.assertEqual(c["candidate_timings"]["tREFI"],9347)

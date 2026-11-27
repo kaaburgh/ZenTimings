@@ -49,7 +49,7 @@ namespace ZenTimings.Cli
             --apob-compare-image: DRFXI only; equality-only JSON, compare local AFU with reserved RAM.
             --apob-compare-file: use an existing local APOB table instead of reading RAM (offline comparison).
             --mcr: saved DRFXI 1.15/1.17 CBS Memory Context Restore policy only; no runtime restore claim.
-            --modules: SMBIOS DIMM inventory and already-bound SPD EEPROMs (no I2C probing).
+            --modules: SMBIOS DIMM inventory, bound SPD EEPROMs and SPD5118 temperatures (no I2C probing).
             --extended: additional UMC fields, BGS, refresh mode and DDR5 Nitro.
             --pm-table: experimental Picasso SMU telemetry; no configured clock substitution.
             Exit codes: 0 success, 1 unavailable/unmatched, 2 invalid arguments or I/O.
@@ -435,9 +435,18 @@ namespace ZenTimings.Cli
                         $"revision {d.revision}, tCK min {d.tck_min_ps} ps, base CRC {d.base_crc_valid}");
                     PrintSpdDetails(d);
                 }
+                Console.WriteLine("DDR5 DIMM temperatures:");
+                if(inventory.dimm_temperatures.Length==0) Console.WriteLine("  No bound SPD5118 devices.");
+                foreach(var sensor in inventory.dimm_temperatures)
+                {
+                    var value=sensor.temperature_millicelsius;
+                    Console.WriteLine($"  {sensor.device} ({sensor.driver}): "+
+                        (value.HasValue?(value.Value/1000.0).ToString("0.00",System.Globalization.CultureInfo.InvariantCulture)+" °C":sensor.status));
+                }
                 Console.WriteLine(inventory.note);
             }
-            return inventory.modules.Length>0 || inventory.spd.Any(d=>d.base_crc_valid==true)?0:1;
+            return inventory.modules.Length>0 || inventory.spd.Any(d=>d.base_crc_valid==true) ||
+                inventory.dimm_temperatures.Any(d=>d.temperature_millicelsius.HasValue)?0:1;
         }
 
         private static void PrintSpdDetails(LinuxMemoryInventory.Spd spd)

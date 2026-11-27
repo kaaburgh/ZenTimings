@@ -2,6 +2,7 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -138,8 +139,13 @@ namespace ZenTimings.Cli
                 !full?"unavailable: incomplete image or invalid module CRC":d.HasXmp?"present (upstream decoded)":"not present",
                 full?SafeText(d.XmpRevision):null,profiles);
         }
+        internal sealed record DimmTemperature(string device,string driver,int? temperature_millicelsius,
+            string status);
         internal sealed record Result(string smbios_status,Module[] modules,string spd_status,Spd[] spd,
-            string note);
+            string note)
+        {
+            public DimmTemperature[] dimm_temperatures { get; init; } = Array.Empty<DimmTemperature>();
+        }
 
         // SMBIOS Type 17 formatted offsets. Never export serial number, asset tag,
         // raw DMI records or raw SPD (which contains serial numbers).
@@ -288,6 +294,35 @@ namespace ZenTimings.Cli
             return result;
         }
 
+        // Only a hwmon child of the already-bound SPD5118 I2C device.
+        // Do not read alarm files: those may clear sticky status on read.
+        private static DimmTemperature ReadTemperature(string path,string device)
+        {
+            DimmTemperature Result(int? value,string status)=>new(device,"spd5118",value,status);
+            try
+            {
+                var sensors=new List<string>();
+                foreach(var hw in Directory.EnumerateDirectories(Path.Combine(path,"hwmon")))
+                {
+                    if(!Regex.IsMatch(Path.GetFileName(hw),@"\Ahwmon[0-9]+\z")) continue;
+                    if(Encoding.ASCII.GetString(ReadBounded(Path.Combine(hw,"name"),32)).Trim()=="spd5118")
+                        sensors.Add(hw);
+                }
+                if(sensors.Count!=1)
+                    return Result(null,sensors.Count==0?"no SPD5118 hwmon sensor":"ambiguous SPD5118 hwmon sensors");
+                string raw=Encoding.ASCII.GetString(ReadBounded(Path.Combine(sensors[0],"temp1_input"),32)).Trim();
+                // Linux SPD5118: signed 11-bit measurement, 250 millidegrees C per step.
+                if(!int.TryParse(raw,NumberStyles.AllowLeadingSign,CultureInfo.InvariantCulture,out int value) ||
+                    value < -256000 || value > 255750 || value%250!=0)
+                    return Result(null,"invalid temperature reading");
+                return Result(value,"available");
+            }
+            catch(DirectoryNotFoundException) { return Result(null,"hwmon unavailable"); }
+            catch(FileNotFoundException) { return Result(null,"temperature attribute unavailable"); }
+            catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
+            { return Result(null,ex.GetType().Name+": temperature unavailable"); }
+        }
+
         internal static Result Capture(string sysRoot)
         {
             var modules=Array.Empty<Module>(); string dmiStatus;
@@ -298,7 +333,7 @@ namespace ZenTimings.Cli
             }
             catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
             { dmiStatus=ex.GetType().Name+": "+ex.Message; }
-            var spd=new List<Spd>(); string spdStatus;
+            var spd=new List<Spd>(); var temperatures=new List<DimmTemperature>(); string spdStatus;
             try
             {
                 string root=Path.Combine(sysRoot,"bus/i2c/devices");
@@ -311,6 +346,7 @@ namespace ZenTimings.Cli
                     try { driver=Path.GetFileName(new DirectoryInfo(driverPath).ResolveLinkTarget(false)?.FullName); }
                     catch(IOException) { continue; }
                     if(driver!="ee1004" && driver!="spd5118") continue;
+                    if(driver=="spd5118") temperatures.Add(ReadTemperature(path,name));
                     try
                     {
                         var b=ReadBounded(Path.Combine(path,"eeprom"),driver=="ee1004"?512:1024);
@@ -325,7 +361,8 @@ namespace ZenTimings.Cli
             catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
             { spdStatus=ex.GetType().Name+": "+ex.Message; }
             return new Result(dmiStatus,modules,spdStatus,spd.ToArray(),
-                "SMBIOS values are firmware-reported, not live sensor readings. SPD and DMI entries are not automatically matched to physical UMCs. No serials or raw bytes exported; no bus scans.");
+                "SMBIOS values are firmware-reported. SPD5118 temperatures are kernel sensor readings, not SPD data. SPD and DMI entries are not automatically matched to physical UMCs. No serials or raw bytes exported; no bus scans.")
+                { dimm_temperatures=temperatures.ToArray() };
         }
     }
 }

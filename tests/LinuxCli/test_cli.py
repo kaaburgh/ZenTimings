@@ -132,6 +132,58 @@ class CliTest(unittest.TestCase):
         self.write("Setup", SETUP, setup[:-1])
         self.assertFalse(self.result(code=1)["matched"])
 
+    def test_dimm_temperatures(self):
+        bus = self.root / "bus/i2c/devices"
+        bus.mkdir(parents=True)
+        def device(name, driver, readings):
+            dev = bus / name
+            dev.mkdir()
+            target = self.root / "bus/i2c/drivers" / driver
+            target.mkdir(parents=True, exist_ok=True)
+            (dev / "driver").symlink_to(target, target_is_directory=True)
+            for idx, (sensor_name, value) in enumerate(readings):
+                hw = dev / "hwmon" / ("hwmon" + str(idx))
+                hw.mkdir(parents=True)
+                (hw / "name").write_text(sensor_name + "\n")
+                (hw / "temp1_input").write_text(value)
+            return dev
+        a = device("1-0050", "spd5118", [("spd5118", "42750\n")])
+        b = device("1-0051", "spd5118", [("spd5118", "-1250\n")])
+        device("1-0052", "spd5118", [])
+        device("1-0053", "spd5118", [("spd5118", "999999\n")])
+        device("1-0054", "spd5118", [("spd5118", "42000"), ("spd5118", "43000")])
+        device("1-0055", "spd5118", [("other", "42000")])
+        device("1-0056", "ee1004", [("spd5118", "50000")])
+        device("1-0057", "at24", [("spd5118", "50000")])
+        device("1-0040", "spd5118", [("spd5118", "50000")])
+        def temperatures(code=0):
+            out = json.loads(self.invoke("--modules", "--json", code=code).stdout)["memory_inventory"]
+            self.assertTrue(all(x["base_crc_valid"] is None for x in out["spd"]))
+            return {x["device"]: x for x in out["dimm_temperatures"]}
+        before = {p: p.read_bytes() for p in bus.glob("*/hwmon/hwmon*/temp1_input")}
+        j = temperatures()
+        self.assertEqual(set(j), {"1-005"+str(i) for i in range(6)})
+        self.assertEqual(j["1-0050"]["temperature_millicelsius"], 42750)
+        self.assertEqual(j["1-0051"]["temperature_millicelsius"], -1250)
+        for i in range(2,6):
+            self.assertIsNone(j["1-005"+str(i)]["temperature_millicelsius"])
+        self.assertIn("ambiguous", j["1-0054"]["status"])
+        self.assertIn("42.75 °C", self.invoke("--modules").stdout)
+        self.assertEqual(before, {p: p.read_bytes() for p in before})
+        # Sensor success is independent of absent EEPROM / DMI, and
+        # malformed readings must not become plausible zero temperatures.
+        (a / "hwmon/hwmon0/temp1_input").write_text("42.75")
+        (b / "hwmon/hwmon0/temp1_input").write_text("42001")
+        j = temperatures(code=1)
+        self.assertIsNone(j["1-0050"]["temperature_millicelsius"])
+        self.assertIsNone(j["1-0051"]["temperature_millicelsius"])
+        (a / "hwmon/hwmon0/temp1_input").write_text("0")
+        self.assertEqual(temperatures()["1-0050"]["temperature_millicelsius"], 0)
+        (a / "hwmon/hwmon0/temp1_input").write_text("1"*33)
+        self.assertIsNone(temperatures(code=1)["1-0050"]["temperature_millicelsius"])
+        (a / "hwmon/hwmon0/temp1_input").unlink()
+        self.assertIn("unavailable", temperatures(code=1)["1-0050"]["status"])
+
     def test_memory_inventory(self):
         import binascii
         import struct

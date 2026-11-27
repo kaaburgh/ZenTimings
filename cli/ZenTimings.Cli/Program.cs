@@ -29,6 +29,7 @@ namespace ZenTimings.Cli
               zentimings --pm-table [--json]
               zentimings --watch (--timings | --compare | --pm-table) [--interval SECONDS] [--samples N] [--json]
               zentimings --modules [--json]
+              zentimings --temperatures [--watch] [--interval SECONDS] [--samples N] [--json]
               zentimings --mcr [--json]
               zentimings --apob [--json]
               zentimings --apob-file FILE [--json]
@@ -52,6 +53,7 @@ namespace ZenTimings.Cli
             --apob-compare-file: use an existing local APOB table instead of reading RAM (offline comparison).
             --mcr: saved DRFXI 1.15/1.17 CBS Memory Context Restore policy only; no runtime restore claim.
             --modules: SMBIOS DIMM inventory, bound SPD EEPROMs and SPD5118 temperatures (no I2C probing).
+            --temperatures: standalone DDR5 SPD5118 hub readings, no SPD EEPROM or DMI access; supports --watch.
             --extended: additional UMC fields, BGS, refresh mode and DDR5 Nitro.
             --pm-table: experimental Picasso / Dragon Range SMU telemetry; no configured clock substitution.
             --watch: repeat explicit running/PM modes; 2 seconds by default, wait after each capture, Ctrl+C stops.
@@ -64,7 +66,7 @@ namespace ZenTimings.Cli
             try
             {
                 bool json = false, debug = false, origins = false, timings = false, compare = false, pmTable = false, extended = false, modules = false, apob = false;
-                bool mcr = false, watch = false;
+                bool mcr = false, watch = false, temperatures = false;
                 int interval=WatchLoop.DefaultInterval;
                 int? samples=null;
                 string apobCompareImage = null, apobCompareFile = null;
@@ -87,6 +89,7 @@ namespace ZenTimings.Cli
                         case "--pm-table": pmTable = true; break;
                         case "--extended": extended = true; break;
                         case "--modules": modules = true; break;
+                        case "--temperatures": temperatures = true; break;
                         case "--mcr": mcr = true; break;
                         case "--watch": watch = true; break;
                         case "--interval": interval=WatchLoop.ParsePositive(Next(),WatchLoop.MaxInterval,arg); break;
@@ -106,6 +109,17 @@ namespace ZenTimings.Cli
                 }
                 if(!watch && (seen.Contains("--interval") || seen.Contains("--samples")))
                     throw new ArgumentException("--interval and --samples require --watch.");
+                if(temperatures)
+                {
+                    if(seen.Any(x=>x!="--temperatures" && x!="--watch" && x!="--interval" &&
+                        x!="--samples" && x!="--json" && x!="--sysfs-root"))
+                        throw new ArgumentException("--temperatures is a standalone sensor mode.");
+                    if(!OperatingSystem.IsLinux())
+                        throw new PlatformNotSupportedException("Temperature access requires Linux.");
+                    return watch
+                        ? RunWatch(interval,samples,json,frame=>PrintTemperatures(root,json,frame),false)
+                        : PrintTemperatures(root,json);
+                }
                 if(watch && (!(timings || compare || pmTable) || (timings && compare) ||
                     (extended && !(timings || compare)) ||
                     seen.Any(x=>x!="--watch" && x!="--interval" && x!="--samples" && x!="--json" &&
@@ -217,22 +231,9 @@ namespace ZenTimings.Cli
                     board = firmware.Board;
                     bios = firmware.Bios;
                     if(watch)
-                    {
-                        using var stop=new CancellationTokenSource();
-                        ConsoleCancelEventHandler handler=(_,e)=>{ e.Cancel=true; stop.Cancel(); };
-                        Console.CancelKeyPress+=handler;
-                        try
-                        {
-                            Console.Error.WriteLine("Watch captures are sequential; Ctrl+C stops after the current capture. Stop other SMN clients.");
-                            return WatchLoop.Run(interval,samples,frame=>{
-                                if(!json) Console.WriteLine($"\n--- Sample {frame.sample_index} at {frame.capture_started_utc:O} ---");
-                                return timings || compare
-                                    ? PrintRunning(firmware,compare,json,pmTable,extended,false,false,frame)
-                                    : PrintPmTable(json,frame);
-                            },stop.Token);
-                        }
-                        finally { Console.CancelKeyPress-=handler; }
-                    }
+                        return RunWatch(interval,samples,json,frame=>timings || compare
+                            ? PrintRunning(firmware,compare,json,pmTable,extended,false,false,frame)
+                            : PrintPmTable(json,frame),true);
                     if (timings || compare)
                         return PrintRunning(firmware, compare, json, pmTable, extended, modules, apob);
                     if (apob) return PrintApob(LinuxApob.Capture(),json);
@@ -255,6 +256,40 @@ namespace ZenTimings.Cli
                 Console.Error.WriteLine(ex.GetType().Name + ": " + ex.Message);
                 return 2;
             }
+        }
+
+        private static int RunWatch(int interval,int? samples,bool json,Func<WatchLoop.Frame,int> capture,bool smn)
+        {
+            using var stop=new CancellationTokenSource();
+            ConsoleCancelEventHandler handler=(_,e)=>{ e.Cancel=true; stop.Cancel(); };
+            Console.CancelKeyPress+=handler;
+            try
+            {
+                Console.Error.WriteLine("Watch captures are sequential; Ctrl+C stops after the current capture."+
+                    (smn?" Stop other SMN clients.":""));
+                return WatchLoop.Run(interval,samples,frame=>{
+                    if(!json) Console.WriteLine($"\n--- Sample {frame.sample_index} at {frame.capture_started_utc:O} ---");
+                    return capture(frame);
+                },stop.Token);
+            }
+            finally { Console.CancelKeyPress-=handler; }
+        }
+
+        private static int PrintTemperatures(string root,bool json,WatchLoop.Frame frame=null)
+        {
+            var result=LinuxMemoryInventory.CaptureTemperatures(root);
+            if(json)
+            {
+                var report=new {schema_version=1,dimm_temperatures=result};
+                Console.WriteLine(frame==null?JsonSerializer.Serialize(report,new JsonSerializerOptions{WriteIndented=true}):WatchLoop.Serialize(frame,report));
+            }
+            else
+            {
+                Console.WriteLine("DDR5 DIMM temperatures: "+result.status);
+                PrintTemperatureRows(result.sensors);
+                Console.WriteLine(result.note);
+            }
+            return result.available?0:1;
         }
 
         private static int PrintRunning(LinuxFirmware firmware, bool compare, bool json, bool pmTable, bool extended, bool modules, bool apob, WatchLoop.Frame frame=null)
@@ -477,17 +512,21 @@ namespace ZenTimings.Cli
                     PrintSpdDetails(d);
                 }
                 Console.WriteLine("DDR5 DIMM temperatures:");
-                if(inventory.dimm_temperatures.Length==0) Console.WriteLine("  No bound SPD5118 devices.");
-                foreach(var sensor in inventory.dimm_temperatures)
-                {
-                    var value=sensor.temperature_millicelsius;
-                    Console.WriteLine($"  {sensor.device} ({sensor.driver}): "+
-                        (value.HasValue?(value.Value/1000.0).ToString("0.00",System.Globalization.CultureInfo.InvariantCulture)+" °C":sensor.status));
-                }
+                PrintTemperatureRows(inventory.dimm_temperatures);
                 Console.WriteLine(inventory.note);
             }
             return inventory.modules.Length>0 || inventory.spd.Any(d=>d.base_crc_valid==true) ||
                 inventory.dimm_temperatures.Any(d=>d.temperature_millicelsius.HasValue)?0:1;
+        }
+
+        private static void PrintTemperatureRows(LinuxMemoryInventory.DimmTemperature[] sensors)
+        {
+            foreach(var sensor in sensors)
+            {
+                var value=sensor.temperature_millicelsius;
+                Console.WriteLine($"  {sensor.device} ({sensor.driver}): "+
+                    (value.HasValue?(value.Value/1000.0).ToString("0.00",System.Globalization.CultureInfo.InvariantCulture)+" °C":sensor.status));
+            }
         }
 
         private static void PrintSpdDetails(LinuxMemoryInventory.Spd spd)

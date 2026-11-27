@@ -88,9 +88,9 @@ namespace ZenTimings.Cli
                 "Upstream-mapped SMU telemetry; averaging and physical sensor semantics not independently verified. Not the configured UMC frequency. No BCLK correction or saved/running comparison.");
         }
 
-        private static byte[] ReadFile(string name,int limit)
+        private static byte[] ReadFile(string name,int limit,string root=Root)
         {
-            using var file=new FileStream(Path.Combine(Root,name),FileMode.Open,FileAccess.Read,FileShare.ReadWrite);
+            using var file=new FileStream(Path.Combine(root,name),FileMode.Open,FileAccess.Read,FileShare.ReadWrite);
             var buffer=new byte[limit+1];
             int count=0;
             while(count<buffer.Length)
@@ -101,6 +101,56 @@ namespace ZenTimings.Cli
             }
             if(count>limit) throw new InvalidDataException(name+": oversized response.");
             return buffer[..count];
+        }
+
+        internal sealed record MetadataProbe(string driver_version,string smu_firmware,string codename,string mp1_if_version,
+            string table_version,ulong? table_size,bool table_file_visible,bool? tuple_supported,string status);
+
+        // Cached driver metadata only. Do not open pm_table or smn, and do
+        // not interpret path visibility as permission or actual capture success.
+        internal static MetadataProbe ProbeMetadata(RunningTimings.CpuId cpu,string driverRoot)
+        {
+            T Try<T>(Func<T> read,T unavailable)
+            {
+                try { return read(); }
+                catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
+                { return unavailable; }
+            }
+            string Text(string name)=>Try(()=>{
+                string value=System.Text.Encoding.ASCII.GetString(ReadFile(name,64,driverRoot)).Trim();
+                return value.Length>0 && value.All(c=>c>=0x20 && c<=0x7E)?value:null;
+            },(string)null);
+            var driver=Text("drv_version");
+            var firmware=Text("version");
+            var codename=Text("codename");
+            var mp1=Text("mp1_if_version");
+            uint? version=Try<uint?>(()=>{
+                byte[] bytes=ReadFile("pm_table_version",4,driverRoot);
+                return bytes.Length==4?BinaryPrimitives.ReadUInt32LittleEndian(bytes):null;
+            },null);
+            ulong? length=Try<ulong?>(()=>{
+                byte[] bytes=ReadFile("pm_table_size",8,driverRoot);
+                return bytes.Length==8?BinaryPrimitives.ReadUInt64LittleEndian(bytes):null;
+            },null);
+            bool visible=File.Exists(Path.Combine(driverRoot,"pm_table"));
+            bool? supported=null;
+            string status="incomplete/unreadable metadata; no PM Table capture attempted";
+            if(driver!=null && codename!=null && mp1!=null && version.HasValue && length.HasValue)
+            {
+                try
+                {
+                    ValidateIdentity(cpu,driver,codename,mp1,version.Value,length.Value);
+                    supported=true;
+                    status=visible?"known metadata tuple; capture not tested":"known metadata tuple; PM Table path not visible";
+                }
+                catch(NotSupportedException)
+                {
+                    supported=false;
+                    status="unsupported metadata tuple; no PM Table capture attempted";
+                }
+            }
+            return new MetadataProbe(driver,firmware,codename,mp1,version.HasValue?$"0x{version.Value:X8}":null,
+                length,visible,supported,status);
         }
 
         internal static Result Capture()

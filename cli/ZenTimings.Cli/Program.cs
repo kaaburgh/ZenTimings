@@ -29,6 +29,7 @@ namespace ZenTimings.Cli
               zentimings --pm-table [--json]
               zentimings --watch (--timings | --compare | --pm-table) [--interval SECONDS] [--samples N] [--json]
               zentimings --modules [--json]
+              zentimings --capabilities [--json]
               zentimings --temperatures [--watch] [--interval SECONDS] [--samples N] [--json]
               zentimings --mcr [--json]
               zentimings --apob [--json]
@@ -54,6 +55,7 @@ namespace ZenTimings.Cli
             --mcr: saved DRFXI 1.15/1.17 CBS Memory Context Restore policy only; no runtime restore claim.
             --modules: SMBIOS DIMM inventory, bound SPD EEPROMs and SPD5118 temperatures (no I2C probing).
             --temperatures: standalone DDR5 SPD5118 hub readings, no SPD EEPROM or DMI access; supports --watch.
+            --capabilities: passive interface visibility and cached driver metadata; no actual capture.
             --extended: additional UMC fields, BGS, refresh mode and DDR5 Nitro.
             --pm-table: experimental Picasso / Dragon Range SMU telemetry; no configured clock substitution.
             --watch: repeat explicit running/PM modes; 2 seconds by default, wait after each capture, Ctrl+C stops.
@@ -66,7 +68,7 @@ namespace ZenTimings.Cli
             try
             {
                 bool json = false, debug = false, origins = false, timings = false, compare = false, pmTable = false, extended = false, modules = false, apob = false;
-                bool mcr = false, watch = false, temperatures = false;
+                bool mcr = false, watch = false, temperatures = false, capabilities = false;
                 int interval=WatchLoop.DefaultInterval;
                 int? samples=null;
                 string apobCompareImage = null, apobCompareFile = null;
@@ -90,6 +92,7 @@ namespace ZenTimings.Cli
                         case "--extended": extended = true; break;
                         case "--modules": modules = true; break;
                         case "--temperatures": temperatures = true; break;
+                        case "--capabilities": capabilities = true; break;
                         case "--mcr": mcr = true; break;
                         case "--watch": watch = true; break;
                         case "--interval": interval=WatchLoop.ParsePositive(Next(),WatchLoop.MaxInterval,arg); break;
@@ -109,6 +112,14 @@ namespace ZenTimings.Cli
                 }
                 if(!watch && (seen.Contains("--interval") || seen.Contains("--samples")))
                     throw new ArgumentException("--interval and --samples require --watch.");
+                if(capabilities)
+                {
+                    if(seen.Any(x=>x!="--capabilities" && x!="--json" && x!="--sysfs-root"))
+                        throw new ArgumentException("--capabilities is a standalone metadata-only mode.");
+                    if(!OperatingSystem.IsLinux())
+                        throw new PlatformNotSupportedException("Capability inspection requires Linux.");
+                    return PrintCapabilities(root,json);
+                }
                 if(temperatures)
                 {
                     if(seen.Any(x=>x!="--temperatures" && x!="--watch" && x!="--interval" &&
@@ -256,6 +267,26 @@ namespace ZenTimings.Cli
                 Console.Error.WriteLine(ex.GetType().Name + ": " + ex.Message);
                 return 2;
             }
+        }
+
+        private static int PrintCapabilities(string root,bool json)
+        {
+            var result=LinuxCapabilities.Capture(root,RunningTimings.Identify());
+            if(json) Console.WriteLine(JsonSerializer.Serialize(new {schema_version=1,capabilities=result},
+                new JsonSerializerOptions{WriteIndented=true}));
+            else
+            {
+                Console.WriteLine($"CPU: {result.cpu.Vendor} {result.cpu.Family:X}h:{result.cpu.Model:X}h");
+                Console.WriteLine($"UMC map candidate: {result.umc_map_candidate}; SMN file visible: {result.smn_file_visible}");
+                Console.WriteLine($"efivarfs directory visible: {result.efivarfs_directory_visible}; DMI table visible: {result.dmi_table_visible}");
+                var pm=result.pm_table;
+                Console.WriteLine($"PM Table: driver {pm.driver_version??"?"}; SMU {pm.smu_firmware??"?"}; codename {pm.codename??"?"}; MP1 {pm.mp1_if_version??"?"}");
+                Console.WriteLine($"  {pm.table_version??"?"}; size {pm.table_size?.ToString()??"?"}; file visible {pm.table_file_visible}; {pm.status}");
+                var spd=result.bound_spd_devices;
+                Console.WriteLine($"Bound SPD devices: ee1004 {spd.ee1004?.ToString()??"?"}, spd5118 {spd.spd5118?.ToString()??"?"}; {spd.status}");
+                Console.WriteLine(result.note);
+            }
+            return 0; // completed inspection, not successful hardware acquisition
         }
 
         private static int RunWatch(int interval,int? samples,bool json,Func<WatchLoop.Frame,int> capture,bool smn)

@@ -119,6 +119,43 @@ internal static class Program
         Fails<NotSupportedException>(()=>LinuxPowerTable.Decode(new("AuthenticAMD",0x19,0x61),"0.1.2","03","1","4.30.72.0",0x1E0004,0x6AC,b),"wrong CPU rejected");
     }
 
+    private static void DragonRangePowerTable()
+    {
+        var cpu=new RunningTimings.CpuId("AuthenticAMD",0x19,0x61);
+        var bytes=new byte[0x8D0];
+        void Set(int off,float value)=>System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(off,4),BitConverter.SingleToInt32Bits(value));
+        // Synthetic values, not a private hardware dump. Distinct clocks and
+        // adjacent decoys catch accidental use of the Raphael 0x540004 map.
+        Set(0x118,111);Set(0x128,222);Set(0x138,333);Set(0x430,0.25f);
+        Set(0x11C,1900);Set(0x12C,1450);Set(0x13C,2900);
+        Set(0x434,0.95f);
+        Set(0xBC,0.9f);Set(0xC0,0.88f);Set(0xC4,12);Set(0xCC,45);
+        Set(0xD0,1.2f);Set(0xD4,1.17f);Set(0xD8,8);Set(0xE0,48);
+        Set(0xE4,1.1f);Set(0xE8,1.08f);Set(0xEC,4);Set(0xF4,50);
+        bytes[^1]=0xAB; // not a Picasso-style zero-padded table
+        LinuxPowerTable.Sample Decode(byte[] data,uint version=0x540208,ulong size=0x8D0,string driver="0.1.7",string codename="20",string mp1="2")
+            =>LinuxPowerTable.Decode(cpu,driver,codename,mp1,"84.0.0.0",version,size,data);
+        var r=Decode(bytes);
+        Check(r.fclk_mhz==1900 && r.uclk_mhz==1450 && r.mclk_mhz==2900,"Dragon Range exact clock offsets");
+        Check(r.vsoc_v==1.17f && r.cldo_vddp_v==0.95f && r.vdd_misc_v==1.08f,"Dragon Range voltage offsets");
+        Check(r.svi3.Length==3 && r.svi3[0].rail=="VDD" && r.svi3[0].vid_v==0.9f &&
+            r.svi3[0].voltage_v==0.88f && r.svi3[0].current_a==12 && r.svi3[0].vrm_temperature_c==45,"SVI3 VDD");
+        Check(r.svi3[1].rail=="SOC" && r.svi3[1].voltage_v==r.vsoc_v && r.svi3[1].current_a==8,"SVI3 SOC");
+        Check(r.svi3[2].rail=="MISC" && r.svi3[2].voltage_v==r.vdd_misc_v && r.svi3[2].vrm_temperature_c==50,"SVI3 MISC");
+        Set(0xC4,float.NaN);Set(0xF4,151);
+        r=Decode(bytes);
+        Check(r.svi3[0].current_a==null && r.svi3[2].vrm_temperature_c==null && r.mclk_mhz==2900,"optional SVI3 invalid fields withheld");
+        Fails<NotSupportedException>(()=>Decode(bytes,version:0x540004),"other Raphael version not accepted");
+        Fails<NotSupportedException>(()=>Decode(bytes,size:0x994),"Windows extent not assumed for Linux");
+        Fails<NotSupportedException>(()=>Decode(bytes,driver:"0.1.2"),"unreviewed driver rejected");
+        Fails<NotSupportedException>(()=>Decode(bytes,codename:"03"),"wrong codename rejected");
+        Fails<NotSupportedException>(()=>Decode(bytes,mp1:"1"),"wrong MP1 rejected");
+        Fails<InvalidDataException>(()=>Decode(bytes[..^1]),"truncated Dragon Range rejected");
+        Fails<InvalidDataException>(()=>Decode(new byte[0x8D0]),"zero table rejected");
+        Set(0x13C,float.PositiveInfinity);
+        Fails<InvalidDataException>(()=>Decode(bytes),"nonfinite Dragon Range MCLK rejected");
+    }
+
     private static void ExtendedCapture()
     {
         foreach(bool ddr5 in new[]{false,true})
@@ -266,6 +303,7 @@ internal static class Program
         ApobUmcReportCorrelation();
         M75nCapture();
         PowerTableCaptures();
+        DragonRangePowerTable();
         ExtendedCapture();
         ApobRangePolicy();
         ApobStableComparison();

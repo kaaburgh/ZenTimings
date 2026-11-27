@@ -51,7 +51,7 @@ namespace ZenTimings.Cli
             --mcr: saved DRFXI 1.15/1.17 CBS Memory Context Restore policy only; no runtime restore claim.
             --modules: SMBIOS DIMM inventory, bound SPD EEPROMs and SPD5118 temperatures (no I2C probing).
             --extended: additional UMC fields, BGS, refresh mode and DDR5 Nitro.
-            --pm-table: experimental Picasso SMU telemetry; no configured clock substitution.
+            --pm-table: experimental Picasso / Dragon Range SMU telemetry; no configured clock substitution.
             Exit codes: 0 success, 1 unavailable/unmatched, 2 invalid arguments or I/O.
             """;
 
@@ -509,6 +509,14 @@ namespace ZenTimings.Cli
             Console.WriteLine($"  Version: {p.table_version}; bytes: {p.table_size}; driver: {p.driver_version}; SMU: {p.smu_firmware}");
             Console.WriteLine($"  SMU FCLK {p.fclk_mhz:F2} MHz, UCLK {p.uclk_mhz:F2} MHz, MCLK {p.mclk_mhz:F2} MHz");
             Console.WriteLine($"  SMU VSOC {p.vsoc_v:F4} V, CLDO VDDP {p.cldo_vddp_v:F4} V");
+            if(p.vdd_misc_v.HasValue) Console.WriteLine($"  SMU VDD Misc {p.vdd_misc_v:F4} V");
+            if(p.svi3!=null)
+            {
+                string Display(float? v,string unit)=>v.HasValue?v.Value.ToString("F3",System.Globalization.CultureInfo.InvariantCulture)+" "+unit:"unavailable";
+                foreach(var rail in p.svi3)
+                    Console.WriteLine($"  SVI3 {rail.rail}: VID {Display(rail.vid_v,"V")}, voltage {Display(rail.voltage_v,"V")}, "+
+                        $"current {Display(rail.current_a,"A")}, VRM {Display(rail.vrm_temperature_c,"°C")}");
+            }
             Console.WriteLine("  "+p.note);
         }
 

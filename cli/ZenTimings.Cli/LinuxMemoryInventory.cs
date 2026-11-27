@@ -42,7 +42,13 @@ namespace ZenTimings.Cli
             bool is_asymmetric,bool has_thermal_sensor,int? jedec_speed_mts,int[] supported_cl,
             SortedDictionary<string,int> jedec_min_ps,SortedDictionary<string,int> jedec_refresh_ns,
             SortedDictionary<string,int> jedec_timings_at_max_rate_clocks,string xmp_status,string xmp_revision,
-            string expo_status,string expo_revision,bool? expo_crc_valid,Ddr5Profile[] profiles);
+            string expo_status,string expo_revision,bool? expo_crc_valid,Ddr5Profile[] profiles)
+        {
+            public SupportDevice[] support_devices { get; init; }
+            public bool? thermal_sensor_0_listed { get; init; }
+            public bool? thermal_sensor_1_listed { get; init; }
+        }
+        internal sealed record SupportDevice(string role,bool? listed,string type,string manufacturer,string revision);
 
         private static Ddr5Details DecodeDdr5(byte[] b)
         {
@@ -92,7 +98,28 @@ namespace ZenTimings.Cli
                 !full?"unavailable: incomplete image":d.HasXmp?"present; checksum not verified":"not present",
                 full?SafeText(d.XmpRevision):null,
                 !full?"unavailable: incomplete image":!d.HasExpo?"not present":d.ExpoCrcValid?"CRC valid":"CRC mismatch; profiles omitted",
-                full?SafeText(d.ExpoRevision):null,full && d.HasExpo?d.ExpoCrcValid:null,profiles.ToArray());
+                full?SafeText(d.ExpoRevision):null,full && d.HasExpo?d.ExpoCrcValid:null,profiles.ToArray())
+            {
+                // ParseSpd has checked the CRC of bytes 0..509 even for a
+                // 512-byte image; support descriptors lie entirely within it.
+                support_devices=new[]{
+                    ProjectDevice(b,194,"SPD",d.SpdDevice),ProjectDevice(b,198,"PMIC0",d.Pmic0),
+                    ProjectDevice(b,202,"PMIC1",d.Pmic1),ProjectDevice(b,206,"PMIC2",d.Pmic2),
+                    ProjectDevice(b,210,"TS",d.ThermalSensors)},
+                thermal_sensor_0_listed=ErasedDevice(b,210)?null:d.ThermalSensor0Present,
+                thermal_sensor_1_listed=ErasedDevice(b,210)?null:d.ThermalSensor1Present
+            };
+        }
+        private static bool ErasedDevice(byte[] b,int offset)=>b[offset]==255 && b[offset+1]==255 &&
+            b[offset+2]==255 && b[offset+3]==255;
+        private static SupportDevice ProjectDevice(byte[] b,int offset,string role,Ddr5SpdDevice device)
+        {
+            if(device==null || ErasedDevice(b,offset)) return new(role,null,null,null,null);
+            if(!device.Installed) return new(role,false,null,null,null);
+            byte revision=b[offset+3];
+            bool validVendor=(device.MfgIdCode&0x7F)!=0 && (device.MfgIdCode&0x7F)!=0x7F && device.MfgIdBank!=255;
+            return new(role,true,SafeText(device.TypeName),validVendor?SafeText(device.Manufacturer):null,
+                (revision>>4)<=9 && (revision&15)<=9?SafeText(device.Revision):null);
         }
         private static int? Positive(int x)=>x>0?x:null;
         private static string SafeText(string x)=>string.IsNullOrWhiteSpace(x)?null:

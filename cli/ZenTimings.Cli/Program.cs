@@ -538,6 +538,12 @@ namespace ZenTimings.Cli
                 if(d5==null) return;
                 Console.WriteLine($"    {d5.module_manufacturer} / DRAM {d5.dram_manufacturer}; {d5.capacity_mib} MiB, {d5.ranks_per_channel}R/channel, x{d5.device_width_bits}");
                 Console.WriteLine($"    JEDEC max {d5.jedec_speed_mts} MT/s; XMP: {d5.xmp_status}; EXPO: {d5.expo_status}");
+                foreach(var device in d5.support_devices??Array.Empty<LinuxMemoryInventory.SupportDevice>())
+                    Console.WriteLine($"    SPD-listed {device.role}: "+(device.listed==true?
+                        $"{device.type??"?"}, {device.manufacturer??"?"}, rev {device.revision??"?"}":
+                        device.listed==false?"not listed":"unknown"));
+                if(d5.thermal_sensor_0_listed.HasValue && d5.thermal_sensor_1_listed.HasValue)
+                    Console.WriteLine($"    SPD-listed discrete sensors: TS0={d5.thermal_sensor_0_listed}, TS1={d5.thermal_sensor_1_listed}");
                 Console.WriteLine("    JEDEC at max rate: "+string.Join(", ",d5.jedec_timings_at_max_rate_clocks.Select(p=>$"{p.Key}={p.Value}")));
                 foreach(var p in d5.profiles)
                     Console.WriteLine($"    {p.kind} {p.profile_number}: {p.speed_mts} MT/s, VDD {p.vdd_mv} mV, VDDQ {p.vddq_mv} mV; "+

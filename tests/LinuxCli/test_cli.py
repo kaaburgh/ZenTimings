@@ -1308,6 +1308,46 @@ class CliTest(unittest.TestCase):
         self.assertNotIn("private-report", p.stdout)
         self.assertFalse(json.loads(p.stdout)["apob_umc_correlation"]["available"])
 
+    def test_capabilities_no_hardware_payload_reads(self):
+        driver = self.root / "kernel/ryzen_smu_drv"
+        driver.mkdir(parents=True)
+        for name, value in {"drv_version": "0.1.7", "version": "84.0.0.0",
+                            "codename": "20", "mp1_if_version": "2"}.items():
+            (driver / name).write_text(value + "\n")
+        (driver / "pm_table_version").write_bytes((0x540208).to_bytes(4, "little"))
+        (driver / "pm_table_size").write_bytes((0x8d0).to_bytes(8, "little"))
+        # Unwritten FIFOs catch attempts to open any hardware payload.
+        os.mkfifo(driver / "smn")
+        os.mkfifo(driver / "pm_table")
+        dmi = self.root / "firmware/dmi/tables"
+        dmi.mkdir(parents=True)
+        os.mkfifo(dmi / "DMI")
+        bus = self.root / "bus/i2c/devices/1-0050"
+        bus.mkdir(parents=True)
+        target = self.root / "bus/i2c/drivers/spd5118"
+        target.mkdir(parents=True)
+        (bus / "driver").symlink_to(target, target_is_directory=True)
+        os.mkfifo(bus / "eeprom")
+        hw = bus / "hwmon/hwmon0"
+        hw.mkdir(parents=True)
+        (hw / "name").write_text("spd5118\n")
+        os.mkfifo(hw / "temp1_input")
+        j = json.loads(self.invoke("--capabilities", "--json").stdout)["capabilities"]
+        self.assertEqual(j["pm_table"]["driver_version"], "0.1.7")
+        self.assertEqual(j["pm_table"]["table_version"], "0x00540208")
+        self.assertEqual(j["pm_table"]["table_size"], 0x8d0)
+        self.assertTrue(j["efivarfs_directory_visible"])
+        self.assertEqual(j["bound_spd_devices"]["spd5118"], 1)
+        self.assertEqual(j["bound_spd_devices"]["ee1004"], 0)
+        self.assertIn("Metadata/paths only", j["note"])
+        # CPU identity is the real CI host; never infer synthetic AMD hardware.
+        expected = j["cpu"]["Vendor"] == "AuthenticAMD" and j["cpu"]["Family"] == 0x19 and j["cpu"]["Model"] == 0x61
+        self.assertEqual(j["pm_table"]["tuple_supported"], expected)
+        self.invoke("--capabilities", "--watch", code=2)
+        self.invoke("--capabilities", "--timings", code=2)
+        self.invoke("--capabilities", "--debug", code=2)
+        self.invoke("--capabilities", "--temperatures", code=2)
+
     def test_watch_arguments(self):
         for args in (
             ("--watch",), ("--watch", "--origins"), ("--watch", "--mcr"),

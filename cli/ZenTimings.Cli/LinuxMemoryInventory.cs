@@ -366,6 +366,21 @@ namespace ZenTimings.Cli
             }
         }
 
+        internal sealed record BoundDeviceCounts(int? ee1004,int? spd5118,string status);
+
+        internal static BoundDeviceCounts ProbeBoundDevices(string sysRoot)
+        {
+            try
+            {
+                int d4=0,d5=0;
+                foreach(var (_,_,driver) in BoundSpdDevices(sysRoot))
+                    if(driver=="ee1004") d4++; else if(driver=="spd5118") d5++;
+                return new BoundDeviceCounts(d4,d5,"existing bound clients only; EEPROM and sensors not read");
+            }
+            catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
+            { return new BoundDeviceCounts(null,null,"device enumeration unavailable"); }
+        }
+
         internal sealed record TemperatureResult(bool available,string status,DimmTemperature[] sensors,string note);
 
         internal static TemperatureResult CaptureTemperatures(string sysRoot)

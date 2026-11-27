@@ -119,6 +119,39 @@ internal static class Program
         Fails<NotSupportedException>(()=>LinuxPowerTable.Decode(new("AuthenticAMD",0x19,0x61),"0.1.2","03","1","4.30.72.0",0x1E0004,0x6AC,b),"wrong CPU rejected");
     }
 
+    private static void CapabilityFixtures()
+    {
+        string root=Path.Combine(Path.GetTempPath(),"zentimings-probe-"+Guid.NewGuid().ToString("N"));
+        string driver=Path.Combine(root,"kernel/ryzen_smu_drv");
+        Directory.CreateDirectory(driver);
+        try
+        {
+            var cpu=new RunningTimings.CpuId("AuthenticAMD",0x19,0x61);
+            var missing=LinuxCapabilities.Capture(root,cpu);
+            Check(missing.umc_map_candidate && !missing.smn_file_visible && missing.pm_table.tuple_supported==null,"missing capability metadata");
+            File.WriteAllText(Path.Combine(driver,"drv_version"),"0.1.7\n");
+            File.WriteAllText(Path.Combine(driver,"version"),"84.0.0.0\n");
+            File.WriteAllText(Path.Combine(driver,"codename"),"20\n");
+            File.WriteAllText(Path.Combine(driver,"mp1_if_version"),"2\n");
+            File.WriteAllBytes(Path.Combine(driver,"pm_table_version"),new byte[]{8,2,0x54,0});
+            File.WriteAllBytes(Path.Combine(driver,"pm_table_size"),new byte[]{0xd0,8,0,0,0,0,0,0});
+            // Files deliberately do not contain valid payloads. Only their
+            // visibility is used; the metadata tuple remains independent.
+            File.WriteAllBytes(Path.Combine(driver,"pm_table"),Array.Empty<byte>());
+            File.WriteAllBytes(Path.Combine(driver,"smn"),Array.Empty<byte>());
+            var good=LinuxCapabilities.Capture(root,cpu);
+            Check(good.smn_file_visible && good.pm_table.table_file_visible && good.pm_table.tuple_supported==true &&
+                good.pm_table.table_version=="0x00540208" && good.pm_table.table_size==0x8D0,"known Dragon Range tuple probe");
+            var wrong=LinuxCapabilities.Capture(root,new RunningTimings.CpuId("GenuineIntel",6,1));
+            Check(!wrong.umc_map_candidate && wrong.pm_table.tuple_supported==false,"wrong CPU capability");
+            File.WriteAllText(Path.Combine(driver,"drv_version"),"0.1.6");
+            Check(LinuxCapabilities.Capture(root,cpu).pm_table.tuple_supported==false,"unknown driver tuple");
+            File.WriteAllBytes(Path.Combine(driver,"pm_table_size"),new byte[9]);
+            Check(LinuxCapabilities.Capture(root,cpu).pm_table.tuple_supported==null,"oversized metadata is incomplete");
+        }
+        finally { Directory.Delete(root,true); }
+    }
+
     private static void WatchLoopFixtures()
     {
         var events=new System.Collections.Generic.List<string>();
@@ -344,6 +377,7 @@ internal static class Program
         PowerTableCaptures();
         DragonRangePowerTable();
         WatchLoopFixtures();
+        CapabilityFixtures();
         ExtendedCapture();
         ApobRangePolicy();
         ApobStableComparison();

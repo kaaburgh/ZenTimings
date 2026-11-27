@@ -385,3 +385,12 @@ DDR5 SPD bytes 194–213 describe SPD hub, PMIC0–2 and discrete thermal sensor
 PMIC live monitoring: Linux [January 2026 PMIC50x0 patch](https://lkml.iu.edu/hypermail/linux/kernel/2601.2/09196.html) and [August 2026 PMIC5000 RFC](https://lists.openwall.net/linux-kernel/2026/08/19/1218) are proposed interfaces, not evidence of a stable installed driver. The RFC does not autodetect devices; probe writes measurement configuration, voltage read selects ADC input, and current/power reads switch mode. Upstream Windows PMIC5100 also changes ADC selection to read voltages. Do not add automatic direct I2C transactions or bind a new driver as a fallback. Report SPD-listed part only; live VDD/VDDQ/VPP still unavailable.
 
 BCLK: pinned ZenStates-Core Hardware/Mmio.cs reads FCH MISC_StrapStatus, MISC_EclkModeStatus and MISC_CGPLLConfig3; upstream acknowledges unresolved external clock-generator behavior and incomplete family 19h validation. The previous owner Windows report is consistent with a nominal 100 MHz internal clock register state, not an independent measurement. No reviewed stable Linux read-only interface has been established for these registers on the target board. Do not treat PM MCLK/nominal UMC MCLK as BCLK, do not add arbitrary /dev/mem or force access. Existing 100 MHz nominal assumption and distinct telemetry remain explicit.
+
+
+### Passive Linux capability preflight
+
+```sh
+./zentimings --capabilities --json
+```
+
+Reports actual CPUID, whether the CPU has a candidate UMC map, visibility of the SMN/efivarfs/DMI/PM Table paths, counts of already-bound ee1004/spd5118 clients, and cached ryzen_smu driver/firmware/codename/MP1/version/size metadata. PM tuple status is true for a known tuple, false for a complete unsupported tuple, null when incomplete/unreadable. Neither visibility nor a known tuple establishes permissions or a successful hardware read. No SMN request, PM Table acquisition, UEFI variable, DMI table, SPD EEPROM, hwmon measurement, physical-memory read, driver load or bus scan. Exit 0 means the inspection completed, not that all features are available. Standalone only; fixture sysfs override leaves CPUID actual. Synthetic tests include known/unknown tuple, wrong CPU, missing/oversized metadata and unwritten FIFO payloads to catch accidental acquisition. This is useful before the first physical BD790i Linux test; do not weaken kernel policies if metadata or actual acquisition is unavailable.

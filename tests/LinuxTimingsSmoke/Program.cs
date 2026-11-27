@@ -119,6 +119,45 @@ internal static class Program
         Fails<NotSupportedException>(()=>LinuxPowerTable.Decode(new("AuthenticAMD",0x19,0x61),"0.1.2","03","1","4.30.72.0",0x1E0004,0x6AC,b),"wrong CPU rejected");
     }
 
+    private static void WatchLoopFixtures()
+    {
+        var events=new System.Collections.Generic.List<string>();
+        using var cts=new System.Threading.CancellationTokenSource();
+        int Capture(WatchLoop.Frame frame)
+        {
+            events.Add("sample"+frame.sample_index);
+            string line=WatchLoop.Serialize(frame,new {schema_version=1,running_available=true});
+            using var doc=System.Text.Json.JsonDocument.Parse(line);
+            var root=doc.RootElement;
+            Check(!line.Contains('\n') && root.GetProperty("watch_schema_version").GetInt32()==1 &&
+                root.GetProperty("sample_index").GetInt64()==frame.sample_index &&
+                root.GetProperty("result").GetProperty("running_available").GetBoolean(),"watch single-line envelope");
+            return 0;
+        }
+        bool Wait(TimeSpan duration,System.Threading.CancellationToken token)
+        {
+            Check(duration==TimeSpan.FromSeconds(2) && token==cts.Token,"watch interval and token");
+            events.Add("wait");
+            return false;
+        }
+        Check(WatchLoop.Run(2,3,Capture,cts.Token,Wait)==0 &&
+            string.Join(",",events)=="sample1,wait,sample2,wait,sample3","watch immediate sequential finite captures");
+        events.Clear();
+        Check(WatchLoop.Run(2,null,_=>{events.Add("failed");return 1;},cts.Token,Wait)==1 &&
+            events.Count==1,"watch stops on failed capture");
+        events.Clear();
+        Check(WatchLoop.Run(2,null,_=>{events.Add("sample");cts.Cancel();return 0;},cts.Token,Wait)==0 &&
+            events.Count==1,"watch cancellation during capture stops before wait");
+        Check(WatchLoop.Run(2,1,_=>throw new Exception("unexpected capture"),cts.Token,Wait)==0,"watch pre-cancelled");
+        using var active=new System.Threading.CancellationTokenSource();
+        Check(WatchLoop.Run(1,null,_=>0,active.Token,(_,_)=>true)==0,"watch cancellation during wait");
+        Check(WatchLoop.ParsePositive("2",3600,"--interval")==2,"watch numeric parsing");
+        foreach(string bad in new[]{"0","-1","3601","1.5"," 1","999999999999","x"})
+            Fails<ArgumentException>(()=>WatchLoop.ParsePositive(bad,3600,"--interval"),"invalid watch interval "+bad);
+        Fails<ArgumentOutOfRangeException>(()=>WatchLoop.Run(0,1,_=>0,active.Token),"watch invalid interval");
+        Fails<ArgumentOutOfRangeException>(()=>WatchLoop.Run(1,0,_=>0,active.Token),"watch invalid sample count");
+    }
+
     private static void DragonRangePowerTable()
     {
         var cpu=new RunningTimings.CpuId("AuthenticAMD",0x19,0x61);
@@ -304,6 +343,7 @@ internal static class Program
         M75nCapture();
         PowerTableCaptures();
         DragonRangePowerTable();
+        WatchLoopFixtures();
         ExtendedCapture();
         ApobRangePolicy();
         ApobStableComparison();

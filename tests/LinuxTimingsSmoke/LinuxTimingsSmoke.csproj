@@ -7,6 +7,7 @@
     <Compile Include="../../Common/DrfxiApobComparison.cs" Link="DrfxiApobComparison.cs" />
     <Compile Include="../../cli/ZenTimings.Cli/TimingDictionaryAdapter.cs" Link="TimingDictionaryAdapter.cs" />
     <Compile Include="../../cli/ZenTimings.Cli/LinuxPowerTable.cs" Link="LinuxPowerTable.cs" />
+    <Compile Include="../../cli/ZenTimings.Cli/WatchLoop.cs" Link="WatchLoop.cs" />
     <Compile Include="../../cli/ZenTimings.Cli/ExtendedUmc.cs" Link="ExtendedUmc.cs" />
     <Compile Include="../../cli/ZenTimings.Cli/RunningTimings.cs" Link="RunningTimings.cs" />
     <Compile Include="../../ZenStates-Core/Dictionaries/DDR4Dictionary.cs" Link="DDR4Dictionary.cs" />

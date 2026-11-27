@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 using ZenTimings.BiosOrigin;
 using ZenTimings.Common;
 
@@ -26,6 +27,7 @@ namespace ZenTimings.Cli
               zentimings --timings [--extended] [--pm-table] [--modules] [--apob] [--json]
               zentimings --compare [--extended] [--pm-table] [--modules] [--apob] [--json]
               zentimings --pm-table [--json]
+              zentimings --watch (--timings | --compare | --pm-table) [--interval SECONDS] [--samples N] [--json]
               zentimings --modules [--json]
               zentimings --mcr [--json]
               zentimings --apob [--json]
@@ -52,6 +54,8 @@ namespace ZenTimings.Cli
             --modules: SMBIOS DIMM inventory, bound SPD EEPROMs and SPD5118 temperatures (no I2C probing).
             --extended: additional UMC fields, BGS, refresh mode and DDR5 Nitro.
             --pm-table: experimental Picasso / Dragon Range SMU telemetry; no configured clock substitution.
+            --watch: repeat explicit running/PM modes; 2 seconds by default, wait after each capture, Ctrl+C stops.
+            --watch --json emits one JSON envelope per line. --modules and --apob are not repeated.
             Exit codes: 0 success, 1 unavailable/unmatched, 2 invalid arguments or I/O.
             """;
 
@@ -60,7 +64,9 @@ namespace ZenTimings.Cli
             try
             {
                 bool json = false, debug = false, origins = false, timings = false, compare = false, pmTable = false, extended = false, modules = false, apob = false;
-                bool mcr = false;
+                bool mcr = false, watch = false;
+                int interval=WatchLoop.DefaultInterval;
+                int? samples=null;
                 string apobCompareImage = null, apobCompareFile = null;
                 string apobImage = null, apobFile = null, umcReport = null, replay = null, board = null, bios = null, root = "/sys";
                 var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -82,6 +88,9 @@ namespace ZenTimings.Cli
                         case "--extended": extended = true; break;
                         case "--modules": modules = true; break;
                         case "--mcr": mcr = true; break;
+                        case "--watch": watch = true; break;
+                        case "--interval": interval=WatchLoop.ParsePositive(Next(),WatchLoop.MaxInterval,arg); break;
+                        case "--samples": samples=WatchLoop.ParsePositive(Next(),WatchLoop.MaxSamples,arg); break;
                         case "--apob": apob = true; break;
                         case "--apob-file": apobFile = Next(); break;
                         case "--apob-image": apobImage = Next(); break;
@@ -95,6 +104,13 @@ namespace ZenTimings.Cli
                         default: throw new ArgumentException("Unknown option: " + arg);
                     }
                 }
+                if(!watch && (seen.Contains("--interval") || seen.Contains("--samples")))
+                    throw new ArgumentException("--interval and --samples require --watch.");
+                if(watch && (!(timings || compare || pmTable) || (timings && compare) ||
+                    (extended && !(timings || compare)) ||
+                    seen.Any(x=>x!="--watch" && x!="--interval" && x!="--samples" && x!="--json" &&
+                        x!="--timings" && x!="--compare" && x!="--extended" && x!="--pm-table")))
+                    throw new ArgumentException("--watch requires explicit --timings, --compare or --pm-table, without static inventory/APOB or offline modes.");
                 if (umcReport != null &&
                     ((apobImage == null) == (apobFile == null) ||
                      seen.Any(x => x != "--umc-report" && x != "--apob-image" &&
@@ -200,6 +216,23 @@ namespace ZenTimings.Cli
                     var firmware = new LinuxFirmware(root);
                     board = firmware.Board;
                     bios = firmware.Bios;
+                    if(watch)
+                    {
+                        using var stop=new CancellationTokenSource();
+                        ConsoleCancelEventHandler handler=(_,e)=>{ e.Cancel=true; stop.Cancel(); };
+                        Console.CancelKeyPress+=handler;
+                        try
+                        {
+                            Console.Error.WriteLine("Watch captures are sequential; Ctrl+C stops after the current capture. Stop other SMN clients.");
+                            return WatchLoop.Run(interval,samples,frame=>{
+                                if(!json) Console.WriteLine($"\n--- Sample {frame.sample_index} at {frame.capture_started_utc:O} ---");
+                                return timings || compare
+                                    ? PrintRunning(firmware,compare,json,pmTable,extended,false,false,frame)
+                                    : PrintPmTable(json,frame);
+                            },stop.Token);
+                        }
+                        finally { Console.CancelKeyPress-=handler; }
+                    }
                     if (timings || compare)
                         return PrintRunning(firmware, compare, json, pmTable, extended, modules, apob);
                     if (apob) return PrintApob(LinuxApob.Capture(),json);
@@ -224,7 +257,7 @@ namespace ZenTimings.Cli
             }
         }
 
-        private static int PrintRunning(LinuxFirmware firmware, bool compare, bool json, bool pmTable, bool extended, bool modules, bool apob)
+        private static int PrintRunning(LinuxFirmware firmware, bool compare, bool json, bool pmTable, bool extended, bool modules, bool apob, WatchLoop.Frame frame=null)
         {
             // No hardware I/O before explicit --timings or --compare and CPUID validation.
             // The sysfs driver has a global response buffer. Two passes detect some,
@@ -247,7 +280,11 @@ namespace ZenTimings.Cli
             }
             catch (Exception ex)
             {
-                if (json) Console.WriteLine(JsonSerializer.Serialize(new {schema_version=1,running_available=false,status=ex.Message}));
+                if (json)
+                {
+                    var error=new {schema_version=1,running_available=false,status=ex.Message};
+                    Console.WriteLine(frame==null?JsonSerializer.Serialize(error):WatchLoop.Serialize(frame,error));
+                }
                 else Console.Error.WriteLine(ex.Message);
                 return 1;
             }
@@ -266,13 +303,17 @@ namespace ZenTimings.Cli
                         differs_from_running=row?.DiffersFrom(running),note=row?.Details};
                 })
             }).ToArray();
-            if (json) Console.WriteLine(JsonSerializer.Serialize(new {
+            if (json)
+            {
+                var result=new {
                 schema_version=1, running_available=true, experimental=true, cpu=snapshot.Cpu,
                 board=firmware.Board,bios_version=firmware.Bios,source=snapshot.Source,note=snapshot.Note,
                 origins_matched=saved?.IsMatched ?? false,origins_status=compare?(saved?.Status??"efivarfs unavailable"):null,
                 pm_table=telemetry, memory_inventory=inventory, apob=boot,
                 channels=data
-            },new JsonSerializerOptions{WriteIndented=true}));
+                };
+                Console.WriteLine(frame==null?JsonSerializer.Serialize(result,new JsonSerializerOptions{WriteIndented=true}):WatchLoop.Serialize(frame,result));
+            }
             else
             {
                 Console.WriteLine(snapshot.Note);
@@ -493,11 +534,14 @@ namespace ZenTimings.Cli
             Console.WriteLine("  "+result.electrical_status);
         }
 
-        private static int PrintPmTable(bool json)
+        private static int PrintPmTable(bool json, WatchLoop.Frame frame=null)
         {
             var result=LinuxPowerTable.Capture();
-            if(json) Console.WriteLine(JsonSerializer.Serialize(new {schema_version=1,pm_table=result},
-                new JsonSerializerOptions{WriteIndented=true}));
+            if(json)
+            {
+                var report=new {schema_version=1,pm_table=result};
+                Console.WriteLine(frame==null?JsonSerializer.Serialize(report,new JsonSerializerOptions{WriteIndented=true}):WatchLoop.Serialize(frame,report));
+            }
             else PrintPmTableText(result);
             return result.available?0:1;
         }

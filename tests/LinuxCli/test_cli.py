@@ -1246,6 +1246,20 @@ class CliTest(unittest.TestCase):
         self.assertNotIn("private-report", p.stdout)
         self.assertFalse(json.loads(p.stdout)["apob_umc_correlation"]["available"])
 
+    def test_watch_arguments(self):
+        for args in (
+            ("--watch",), ("--watch", "--origins"), ("--watch", "--mcr"),
+            ("--watch", "--modules"), ("--watch", "--timings", "--apob"),
+            ("--watch", "--compare", "--modules"), ("--watch", "--timings", "--compare"),
+            ("--watch", "--pm-table", "--extended"), ("--watch", "--pm-table", "--sysfs-root", str(self.root)),
+            ("--timings", "--interval", "2"), ("--pm-table", "--samples", "1"),
+            ("--watch", "--pm-table", "--interval", "0"), ("--watch", "--pm-table", "--interval", "1.5"),
+            ("--watch", "--pm-table", "--interval", "3601"), ("--watch", "--pm-table", "--samples", "86401"),
+            ("--watch", "--pm-table", "--samples"), ("--watch", "--apob-file", "missing.bin"),
+        ):
+            with self.subTest(args=args):
+                self.invoke(*args, code=2, live=False)
+
     def test_arguments_and_non_uefi(self):
         self.invoke("--debug", "--json", code=2)
         self.invoke("--board", "X670E Steel Legend", "--bios", "1.21", code=2)

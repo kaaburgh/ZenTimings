@@ -291,6 +291,12 @@ class CliTest(unittest.TestCase):
         d5[1:3] = bytes((0x10, 0x12))
         struct.pack_into("<H", d5, 20, 357)
         d5[521:551] = b"TEST-DDR5".ljust(30)
+        # CRC-covered synthetic device descriptors, no private SPD bytes.
+        d5[194:198] = bytes((0, 0x2c, 0x80, 0x21))
+        d5[198:202] = bytes((0, 0x2c, 0x82, 0x13))
+        d5[202:206] = bytes((0, 0x2c, 0x02, 0x13)) # not listed despite populated stale descriptor
+        d5[206:210] = b"\xff"*4
+        d5[210:214] = bytes((0, 0, 0x41, 0xfa)) # TS1 only, invalid vendor and revision
         struct.pack_into("<H", d5, 510, binascii.crc_hqx(d5[:510], 0))
         e5 = spd_device("2-0051", "spd5118", d5)
         spd_device("3-0052", "at24", b"not an SPD driver")
@@ -303,6 +309,24 @@ class CliTest(unittest.TestCase):
         self.assertEqual(inv["spd"][1]["memory_type"], "DDR5")
         self.assertEqual(inv["spd"][1]["tck_min_ps"], 357)
         self.assertTrue(inv["spd"][1]["base_crc_valid"])
+        details = inv["spd"][1]["ddr5"]
+        devices = {x["role"]: x for x in details["support_devices"]}
+        self.assertEqual(devices["SPD"]["type"], "SPD5118")
+        self.assertEqual(devices["PMIC0"]["type"], "PMIC5100")
+        self.assertEqual(devices["PMIC0"]["revision"], "1.3")
+        self.assertTrue(devices["PMIC0"]["listed"])
+        self.assertFalse(devices["PMIC1"]["listed"])
+        self.assertIsNone(devices["PMIC1"]["type"])
+        self.assertIsNone(devices["PMIC2"]["listed"])
+        self.assertTrue(devices["TS"]["listed"])
+        self.assertIsNone(devices["TS"]["manufacturer"])
+        self.assertIsNone(devices["TS"]["revision"])
+        self.assertFalse(details["thermal_sensor_0_listed"])
+        self.assertTrue(details["thermal_sensor_1_listed"])
+        self.assertIn("SPD-listed PMIC0: PMIC5100", self.invoke("--modules").stdout)
+        e5.write_bytes(d5[:512])
+        self.assertEqual(inventory()["spd"][1]["ddr5"]["support_devices"], details["support_devices"])
+        e5.write_bytes(d5)
         self.assertEqual(e4.read_bytes(), d4)
         self.assertEqual(e5.read_bytes(), d5)
         d4[18] ^= 1

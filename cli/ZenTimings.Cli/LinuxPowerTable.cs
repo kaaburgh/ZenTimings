@@ -10,19 +10,38 @@ namespace ZenTimings.Cli
         private const string Root="/sys/kernel/ryzen_smu_drv";
         internal const uint Version=0x001E0004;
         internal const int PayloadSize=0x608, DriverSize=0x6AC;
+        internal const uint DragonRangeVersion=0x540208;
+        internal const int DragonRangeSize=0x8D0;
         internal sealed record Sample(string layout, string driver_version, string smu_firmware,
             string table_version, int table_size, float fclk_mhz, float uclk_mhz, float mclk_mhz,
-            float vsoc_v, float cldo_vddp_v, string note);
+            float vsoc_v, float cldo_vddp_v, string note)
+        {
+            [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+            public float? vdd_misc_v { get; init; }
+            [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+            public Svi3Rail[] svi3 { get; init; }
+        }
+        internal sealed record Svi3Rail(string rail,float? vid_v,float? voltage_v,float? current_a,float? vrm_temperature_c);
         internal sealed record Result(bool available, Sample sample, string status);
 
-        // Exact hardware-observed tuple. No generic version fallback and no
-        // assumption that a larger buffer implies a compatible layout.
+        private static bool IsPicasso(RunningTimings.CpuId cpu) =>
+            cpu.Vendor=="AuthenticAMD" && cpu.Family==0x17 && cpu.Model==0x18;
+        private static bool IsRaphaelClass(RunningTimings.CpuId cpu) =>
+            cpu.Vendor=="AuthenticAMD" && cpu.Family==0x19 && cpu.Model==0x61;
+
+        // Picasso is hardware-observed. Dragon Range is source-derived for
+        // exactly one version/driver tuple; Linux hardware acceptance pending.
+        // No generic version fallback or arbitrary size compatibility.
         internal static void ValidateIdentity(RunningTimings.CpuId cpu, string driver, string codename,
             string mp1, uint version, ulong length)
         {
-            if(cpu.Vendor!="AuthenticAMD" || cpu.Family!=0x17 || cpu.Model!=0x18 ||
-                driver!="0.1.2" || codename!="03" || mp1!="1" || version!=Version || length!=DriverSize)
-                throw new NotSupportedException($"Unverified PM Table tuple: CPU {cpu.Family:X}:{cpu.Model:X}, driver {driver}, codename {codename}, MP1 {mp1}, version 0x{version:X8}, size {length}.");
+            if(IsPicasso(cpu) && driver=="0.1.2" && codename=="03" && mp1=="1" &&
+                version==Version && length==DriverSize) return;
+            // amkillam/ryzen_smu d298366: family 19h model 61h maps to
+            // CODENAME_RAPHAEL=20, IF_VERSION_11=2, version 0x540208 size 0x8D0.
+            if(IsRaphaelClass(cpu) && driver=="0.1.7" && codename=="20" && mp1=="2" &&
+                version==DragonRangeVersion && length==DragonRangeSize) return;
+            throw new NotSupportedException($"Unverified PM Table tuple: CPU {cpu.Family:X}:{cpu.Model:X}, driver {driver}, codename {codename}, MP1 {mp1}, version 0x{version:X8}, size {length}.");
         }
 
         // Offsets: pinned ZenStates-Core Hardware/PowerTable.cs, 0x1E0004.
@@ -31,14 +50,37 @@ namespace ZenTimings.Cli
             string mp1, string firmware, uint version, ulong length, byte[] bytes)
         {
             ValidateIdentity(cpu,driver,codename,mp1,version,length);
-            if(bytes.Length!=DriverSize || bytes.Skip(PayloadSize).Any(b=>b!=0))
+            if((ulong)bytes.Length!=length || (IsPicasso(cpu) && bytes.Skip(PayloadSize).Any(b=>b!=0)))
                 throw new InvalidDataException("PM Table length or zero-padding fingerprint mismatch.");
+            float Raw(int offset)=>BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(offset,4)));
             float Read(int offset,float low,float high)
             {
-                float v=BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(offset,4)));
+                float v=Raw(offset);
                 if(!float.IsFinite(v) || v<low || v>high)
                     throw new InvalidDataException($"Implausible PM Table float at 0x{offset:X}.");
                 return v;
+            }
+            if(IsRaphaelClass(cpu))
+            {
+                // Exact 0x540208 definition from pinned ZenStates-Core.
+                // Corroborated against a Windows Dragon Range debug report;
+                // the Linux driver returns a different, shorter extent.
+                float? Optional(int offset,float low,float high)
+                {
+                    float v=Raw(offset);
+                    return float.IsFinite(v) && v>=low && v<=high?v:null;
+                }
+                Svi3Rail Rail(string name,int offset)=>new(name,
+                    Optional(offset,0,2),Optional(offset+4,0,2),Optional(offset+8,0,500),
+                    Optional(offset+0x10,-40,150));
+                return new Sample("zen4-540208-linux-0.1.7",driver,firmware,$"0x{version:X8}",bytes.Length,
+                    Read(0x11C,0,5000),Read(0x12C,0,5000),Read(0x13C,200,5000),
+                    Read(0xD4,0.1f,2),Read(0x434,0,2),
+                    "Source-derived Dragon Range layout; Linux hardware validation pending. SVI3 labels inherited from upstream; invalid optional fields omitted. No measured BCLK correction, no configured clock substitution.")
+                {
+                    vdd_misc_v=Optional(0xE8,0,2),
+                    svi3=new[]{Rail("VDD",0xBC),Rail("SOC",0xD0),Rail("MISC",0xE4)}
+                };
             }
             return new Sample("picasso-1e0004-linux-0.1.2",driver,firmware,$"0x{version:X8}",bytes.Length,
                 Read(0x298,0,5000),Read(0x29C,0,5000),Read(0x2A0,0,5000),
@@ -66,8 +108,8 @@ namespace ZenTimings.Cli
             try
             {
                 var cpu=RunningTimings.Identify();
-                if(cpu.Vendor!="AuthenticAMD" || cpu.Family!=0x17 || cpu.Model!=0x18)
-                    throw new NotSupportedException("PM Table support limited to Picasso-class CPU 17h:18h.");
+                if(!IsPicasso(cpu) && !IsRaphaelClass(cpu))
+                    throw new NotSupportedException("PM Table support limited to Picasso 17h:18h and Raphael-class 19h:61h.");
                 string Text(string name)=>System.Text.Encoding.ASCII.GetString(ReadFile(name,64)).Trim();
                 var driver=Text("drv_version");
                 var codename=Text("codename");
@@ -93,12 +135,13 @@ namespace ZenTimings.Cli
                 byte[] bytes;
                 try
                 {
-                    bytes=ReadFile("pm_table",DriverSize);
+                    bytes=ReadFile("pm_table",checked((int)length));
                     if(GetVersion()!=version || GetSize()!=length)
                         throw new InvalidDataException("PM Table metadata changed during capture.");
                 }
                 finally { mutex.ReleaseMutex(); }
-                return new Result(true,Decode(cpu,driver,codename,mp1,firmware,version,length,bytes),"mapped, experimental");
+                return new Result(true,Decode(cpu,driver,codename,mp1,firmware,version,length,bytes),
+                    IsPicasso(cpu)?"mapped, experimental":"source-derived, experimental; Linux hardware validation pending");
             }
             catch(Exception ex) { return new Result(false,null,ex.GetType().Name+": "+ex.Message); }
         }

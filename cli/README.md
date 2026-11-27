@@ -366,3 +366,13 @@ sudo ./zentimings --watch --pm-table --interval 2 --samples 10 --json > telemetr
 ```
 
 Explicit `--watch` repeats the same one-shot running or PM Table path (`--compare` also supported). Starts immediately, then waits after each completed capture; 2 s default, integer 1–3600 seconds, optional finite `--samples` 1–86400. Ctrl+C requests cancellation after the current capture or immediately during the wait. A primary failure terminates with its existing exit code, no rapid retry; a combined optional PM failure is reported independently as before. Never overlaps captures, but the existing per-operation lock does not exclude other SMU tools. Do not run other SMN/SMU clients concurrently. Text is appended, no terminal control sequences; JSON is NDJSON, each line an envelope with watch_schema_version=1, sample_index, capture_started_utc, capture_finished_utc, and the unchanged one-shot JSON under result. UTC timestamps bracket CLI capture work, not an atomic hardware sample. No changes to one-shot output. Static SPD/SMBIOS inventory and APOB cannot be repeated with watch; no fixture path or offline mode accepted. Pure scheduling/JSON/cancellation tests and invalid-argument black-box tests; actual repeated hardware acquisition untested.
+
+
+### Temperature-only monitoring
+
+```sh
+./zentimings --temperatures
+./zentimings --temperatures --watch --interval 2 --samples 30 --json
+```
+
+Standalone DDR5 hub temperatures, no root required if the existing hwmon attributes are readable. Uses the exact same bound-device and sensor validation as `--modules`, but never opens SPD EEPROM, reads DMI, accesses SMN or firmware, or loads a driver. Each watch iteration re-enumerates existing device directories to tolerate hotplug/renumbering; no I2C probing. Returns unavailable (exit 1) when no valid measurement exists, including in watch. The explicit standalone mode is not mixed with other modes; use a second terminal for simultaneous clock monitoring. The fixture sysfs override works for this sensor-only mode, including watch. The Linux CLI tests place unwritten FIFOs at the EEPROM and DMI paths to catch accidental reads, verify two complete NDJSON frames and stop on first unavailable sample. No real hardware testing yet.

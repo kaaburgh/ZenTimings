@@ -323,6 +323,40 @@ namespace ZenTimings.Cli
             { return Result(null,ex.GetType().Name+": temperature unavailable"); }
         }
 
+        // Enumerate existing bound clients only, never instantiate or probe
+        // an I2C address. Shared by inventory and temperature-only capture.
+        private static IEnumerable<(string path,string name,string driver)> BoundSpdDevices(string sysRoot)
+        {
+            string root=Path.Combine(sysRoot,"bus/i2c/devices");
+            foreach(string path in Directory.EnumerateDirectories(root).OrderBy(x=>x,StringComparer.Ordinal))
+            {
+                string name=Path.GetFileName(path);
+                if(!Regex.IsMatch(name,@"\A[0-9]+-005[0-7]\z")) continue;
+                string driver;
+                try { driver=Path.GetFileName(new DirectoryInfo(Path.Combine(path,"driver")).ResolveLinkTarget(false)?.FullName); }
+                catch(IOException) { continue; }
+                if(driver=="ee1004" || driver=="spd5118") yield return (path,name,driver);
+            }
+        }
+
+        internal sealed record TemperatureResult(bool available,string status,DimmTemperature[] sensors,string note);
+
+        internal static TemperatureResult CaptureTemperatures(string sysRoot)
+        {
+            var sensors=new List<DimmTemperature>();
+            const string note="SPD5118 hub sensor temperatures from already-bound Linux hwmon devices; no EEPROM read, DMI, slot mapping, bus scan or alarm read.";
+            try
+            {
+                foreach(var (path,name,driver) in BoundSpdDevices(sysRoot))
+                    if(driver=="spd5118") sensors.Add(ReadTemperature(path,name));
+                bool available=sensors.Any(s=>s.temperature_millicelsius.HasValue);
+                return new TemperatureResult(available,available?"available (check per-device status)":
+                    sensors.Count==0?"no bound SPD5118 devices":"no valid SPD5118 temperature",sensors.ToArray(),note);
+            }
+            catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
+            { return new TemperatureResult(false,ex.GetType().Name+": sensor enumeration unavailable",Array.Empty<DimmTemperature>(),note); }
+        }
+
         internal static Result Capture(string sysRoot)
         {
             var modules=Array.Empty<Module>(); string dmiStatus;
@@ -336,16 +370,8 @@ namespace ZenTimings.Cli
             var spd=new List<Spd>(); var temperatures=new List<DimmTemperature>(); string spdStatus;
             try
             {
-                string root=Path.Combine(sysRoot,"bus/i2c/devices");
-                foreach(string path in Directory.EnumerateDirectories(root).OrderBy(x=>x,StringComparer.Ordinal))
+                foreach(var (path,name,driver) in BoundSpdDevices(sysRoot))
                 {
-                    string name=Path.GetFileName(path);
-                    if(!Regex.IsMatch(name,@"^\d+-005[0-7]$")) continue;
-                    string driverPath=Path.Combine(path,"driver");
-                    string driver;
-                    try { driver=Path.GetFileName(new DirectoryInfo(driverPath).ResolveLinkTarget(false)?.FullName); }
-                    catch(IOException) { continue; }
-                    if(driver!="ee1004" && driver!="spd5118") continue;
                     if(driver=="spd5118") temperatures.Add(ReadTemperature(path,name));
                     try
                     {

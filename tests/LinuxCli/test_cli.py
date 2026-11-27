@@ -132,6 +132,44 @@ class CliTest(unittest.TestCase):
         self.write("Setup", SETUP, setup[:-1])
         self.assertFalse(self.result(code=1)["matched"])
 
+    def test_temperature_only_and_watch(self):
+        bus = self.root / "bus/i2c/devices"
+        bus.mkdir(parents=True)
+        target = self.root / "bus/i2c/drivers/spd5118"
+        target.mkdir(parents=True)
+        device = bus / "2-0050"
+        hw = device / "hwmon/hwmon17"
+        hw.mkdir(parents=True)
+        (device / "driver").symlink_to(target, target_is_directory=True)
+        (hw / "name").write_text("spd5118\n")
+        sensor = hw / "temp1_input"
+        sensor.write_text("46750\n")
+        # No writer: an unintended open/read of the EEPROM or DMI FIFO
+        # would block and fail the subprocess timeout.
+        os.mkfifo(device / "eeprom")
+        dmi = self.root / "firmware/dmi/tables"
+        dmi.mkdir(parents=True)
+        os.mkfifo(dmi / "DMI")
+        report = json.loads(self.invoke("--temperatures", "--json").stdout)["dimm_temperatures"]
+        self.assertTrue(report["available"])
+        self.assertEqual(report["sensors"][0]["temperature_millicelsius"], 46750)
+        lines = self.invoke("--temperatures", "--watch", "--interval", "1",
+                            "--samples", "2", "--json").stdout.splitlines()
+        self.assertEqual(len(lines), 2)
+        for idx, line in enumerate(lines, 1):
+            j = json.loads(line)
+            self.assertEqual(j["watch_schema_version"], 1)
+            self.assertEqual(j["sample_index"], idx)
+            self.assertEqual(j["result"]["dimm_temperatures"], report)
+        self.assertEqual(sensor.read_text(), "46750\n")
+        self.assertIn("46.75 °C", self.invoke("--temperatures").stdout)
+        sensor.write_text("bad")
+        lines = self.invoke("--temperatures", "--watch", "--samples", "2", "--json", code=1).stdout.splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertFalse(json.loads(lines[0])["result"]["dimm_temperatures"]["available"])
+        for flag in ("--modules", "--timings", "--compare", "--pm-table", "--mcr", "--debug", "--apob"):
+            self.invoke("--temperatures", flag, code=2)
+
     def test_dimm_temperatures(self):
         bus = self.root / "bus/i2c/devices"
         bus.mkdir(parents=True)
